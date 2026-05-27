@@ -71,7 +71,7 @@ Learning for Knowledge Tracing) Framework:**
 
 *Fig1. MIKT Model Architecture:*
 
-![스크린샷 2026-05-19 오후 2.13.53.png](%E1%84%89%E1%85%B3%E1%84%8F%E1%85%B3%E1%84%85%E1%85%B5%E1%86%AB%E1%84%89%E1%85%A3%E1%86%BA_2026-05-19_%E1%84%8B%E1%85%A9%E1%84%92%E1%85%AE_2.13.53.png)
+![MIKT-architecture.png](MIKT-architecture.png)
 
 결론적으로, 본 연구에 있어 가장 좋은 Backbone Engine은 MIKT라고 볼 수 있다. 특히 User Experience 측면에서 보았을때 실용성을 직접적으로 드러내는 Concept별 Mastery를 추출하기에 최적의 모델 구조를 가지고 있다. 또한 문항과 관련된 Multi-Concept를 그 자체로 활용할 수 있어 다양한 Concept 조합에도 유연하게 대처하며 Question Embedding을 활용하는 아키텍쳐이므로 Question Encoder와의 점목도 원활할 것으로 에상된다.
 
