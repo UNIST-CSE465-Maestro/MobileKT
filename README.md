@@ -23,9 +23,6 @@ MobileKT/
 - `train.py`  
   Main training entrypoint. Supports `mobilekt`, `mobilekt2`, `mobilekt3`, `mobilekt3b`, and `mobilekt4`.
 
-- `run_statics2011_smoke.sh`  
-  Small smoke-test script for quickly checking that Statics2011 training runs.
-
 ## Folders
 
 ### `datasets/`
@@ -107,20 +104,6 @@ Research notes, architecture drafts, diagrams, and related reading material.
 
 - `material/Reading Materials/`  
   Reference papers used during architecture research.
-
-## Local Artifacts
-
-The following folders/files are intentionally ignored by Git:
-
-- `data/`
-- `experiments/`
-- `__pycache__/`
-- `*.pyc`
-- `*.pt`, `*.pth`
-- `*.onnx`
-- `*.zip`
-
-These are expected to be generated locally and should not be committed to the repository.
 
 ## Example Training Commands
 
