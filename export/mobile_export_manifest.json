@@ -1,0 +1,102 @@
+{
+  "schema_version": "1.0",
+  "created_by": "tools/export_mobile_mikt.py",
+  "source_checkpoint": "/workspace/maestro/MobileKT/experiments/statics2011_qe_e2e_teacher_guided_best_20260528/qe_seed2024_lr1e-03_dp0p1/statics2011_qe_trainable_id_seed2024_lr1e-03_dp0p1_seed2024_lr1e-03_dp0.1_q1_d1_logit1_kt1/qe_distill_best.pt",
+  "files": [
+    {
+      "name": "README.md",
+      "bytes": 5100,
+      "sha256": "16fe73ba2adafd71568de03ff42ae62ccd9cc0c0ccf271805b1d83883f34f780"
+    },
+    {
+      "name": "concept_catalog.json",
+      "bytes": 137823,
+      "sha256": "eef0782611a55df32efa43718a213bcce48c329a2ba2f6da70a700ea3eafee7e"
+    },
+    {
+      "name": "concept_id_map.json",
+      "bytes": 12425,
+      "sha256": "4101b86b2e1d50046f5431ec0bbb9954461c182683c53fab0955c997ee82040e"
+    },
+    {
+      "name": "evaluation_report.json",
+      "bytes": 1494,
+      "sha256": "eebf4bc5e7a0820ea8fb35c759a77698fd887a3a00aabe7844aa97d519b02fde"
+    },
+    {
+      "name": "export_validation.json",
+      "bytes": 854,
+      "sha256": "c982ada3404bb5c0f9756ac916bcfc8cf70cf072ec027d3accd508fef0aa6292"
+    },
+    {
+      "name": "kc_mapping_contract.json",
+      "bytes": 600,
+      "sha256": "d82c95c41d1332edfea857ebe5266fa8bd362235c9e262f75d3714dbe8f9adcc"
+    },
+    {
+      "name": "mikt_predict_contract.json",
+      "bytes": 3514,
+      "sha256": "cf50d5f4c2fc00ab1e7ddd905f7fc01be7d5b8f0a19d01b7633039bcaeb32b0d"
+    },
+    {
+      "name": "mikt_state_contract.json",
+      "bytes": 953,
+      "sha256": "5672e9c39d96bc00e93a743cbbdb60113641faa2d7293e5562eb498cdbe45d3f"
+    },
+    {
+      "name": "mobile_mikt_initial_state.npz",
+      "bytes": 158985,
+      "sha256": "68329efb976b1755432977ee6e88e0548a22d0f45edd0df3414b802743653022"
+    },
+    {
+      "name": "mobile_mikt_predict.onnx",
+      "bytes": 593326,
+      "sha256": "8286d5bebcb3d76c103b43e86f193064bbb5ee91ca69acf4991a225dfd9059fc"
+    },
+    {
+      "name": "mobile_mikt_update.onnx",
+      "bytes": 528650,
+      "sha256": "b8afc894fd76a3e076e259fd12d622d0cefd96f6ebb9d6b6791160ab24f55c52"
+    },
+    {
+      "name": "onnx_check_report.json",
+      "bytes": 980,
+      "sha256": "79fbf26044400c61d7ca5c181fec7897ceef795f1c54647fa6b6a4884576fb03"
+    },
+    {
+      "name": "qe_mikt_compatibility.json",
+      "bytes": 2885,
+      "sha256": "b97dad48d53d1824b63635f2d982dbb22962bfa993fdb6dce5312a3c09c3ebf0"
+    },
+    {
+      "name": "qe_server_api_contract.json",
+      "bytes": 1204,
+      "sha256": "0434d731ac5370d9bf3b2765bce945cde2b2f69393838461c8ebc28f0eaff402"
+    },
+    {
+      "name": "qe_server_config.json",
+      "bytes": 259,
+      "sha256": "5dfe9bc6487477aa1603fc3e67128e77892f7e94d9f7b7f998ffa0adf6178255"
+    },
+    {
+      "name": "qe_server_question_encoder.pt",
+      "bytes": 595735,
+      "sha256": "d82c7b882b72d56476da4414d912a9271a83613b72ba80c090def12b6a0ff63c"
+    },
+    {
+      "name": "source_metrics.json",
+      "bytes": 59664,
+      "sha256": "e318bf928560fbaaf8aad2606b7ae14fe72e256242f9fcc71b98f091963d750f"
+    },
+    {
+      "name": "validation_expected_update_state.npz",
+      "bytes": 159033,
+      "sha256": "6531c63fd8c323ec62ef43cb1d93e34b6c7c9519e1ee5354263f8f83cd9d334b"
+    },
+    {
+      "name": "validation_sample_input.json",
+      "bytes": 1929,
+      "sha256": "521c9126b5b872a0da11e99cdfedb26aa11f004d24a135c17c66a7724948b4c8"
+    }
+  ]
+}

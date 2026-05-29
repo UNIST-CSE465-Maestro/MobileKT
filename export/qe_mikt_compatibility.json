@@ -1,0 +1,71 @@
+{
+  "schema_version": "1.0",
+  "mikt_compatibility_version": "mobilekt4-stat-20260528-qe-e2e-teacher-seed2024-dp0.1",
+  "mobile_backbone_checkpoint": "/workspace/maestro/MobileKT/experiments/statics2011_qe_e2e_teacher_guided_best_20260528/qe_seed2024_lr1e-03_dp0p1/statics2011_qe_trainable_id_seed2024_lr1e-03_dp0p1_seed2024_lr1e-03_dp0.1_q1_d1_logit1_kt1/qe_distill_best.pt",
+  "qe_input_feature_encoder": "microsoft/harrier-oss-v1-0.6b",
+  "qe_server_question_encoder_checkpoint": "qe_server_question_encoder.pt",
+  "embedding_dim": 64,
+  "difficulty_dtype": "float32",
+  "difficulty_semantics": "MIKT internal latent difficulty, not Bloom difficulty.",
+  "n_concepts": 640,
+  "state_dim": 64,
+  "max_concepts_per_question": 10,
+  "concept_vocab": {
+    "file": "concept_id_map.json",
+    "source": "/workspace/data/datasets/KT/statics2011/concept2id.json",
+    "sha256": "7a1578f73699fc126a764f9ec0bbc7b39428bb4b998df0c422d027a7ff3c3d3d"
+  },
+  "question_feature_cache": {
+    "source": "/workspace/data/datasets/KT/statics2011/question_harrier_features.pt"
+  },
+  "training_args": {
+    "teacher_ckpt": "/workspace/maestro/MobileKT/experiments/statics2011_v4_compare_20260526_dropout/id_seed2024_lr1e-03_dp0p1/statics2011_mobilekt4_d64_lr1e-03_wd1e-05_nd5_dp0.1/mobilekt_statics2011_mobilekt4_d64_lr1e-03_wd1e-05_nd5_dp0.1_best.pt",
+    "dataset": "statics2011",
+    "data_dir": "/workspace/data/datasets/KT",
+    "question_features_path": "/workspace/data/datasets/KT/statics2011/question_harrier_features.pt",
+    "d": 64,
+    "qde_hidden": 128,
+    "mikt_state_dim": 64,
+    "mikt_output_scale": 5.0,
+    "max_seq_len": 200,
+    "batch_size": 32,
+    "n_epochs": 100,
+    "patience": 15,
+    "lr": 0.001,
+    "weight_decay": 1e-05,
+    "dropout": 0.1,
+    "grad_clip": 1.0,
+    "q_loss_weight": 1.0,
+    "diff_loss_weight": 1.0,
+    "logit_loss_weight": 1.0,
+    "kt_loss_weight": 1.0,
+    "backbone_mode": "trainable",
+    "device": "cuda",
+    "seed": 2024,
+    "session": "statics2011_qe_e2e_teacher_guided_best_20260528/qe_seed2024_lr1e-03_dp0p1"
+  },
+  "meta": {
+    "dataset": "statics2011",
+    "source": "data/datasets/KT/statics2011/ds507_student_step_2026_0513_072601/ds507_student_step_All_Data_1664_2025_0816_054728.txt",
+    "format": "MobileKT sequence CSV",
+    "split": "student-level random split",
+    "seed": 42,
+    "n_questions": 1223,
+    "n_concepts": 640,
+    "n_students": 333,
+    "n_interactions": 189297,
+    "n_train_sequences": 266,
+    "n_valid_sequences": 33,
+    "n_test_sequences": 34,
+    "question_id_base": 1,
+    "concept_id_base": 1,
+    "padding_id": 0,
+    "question_key_format": "Problem Name----Step Name",
+    "concept_source": "KC (F2011), fallback KC (Unique-step), fallback __unknown_kc__",
+    "files": {
+      "question2id": "question2id.json",
+      "concept2id": "concept2id.json"
+    },
+    "question_feature_dim": 1024
+  }
+}

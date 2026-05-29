@@ -1,0 +1,169 @@
+{
+  "schema_version": "1.0",
+  "engine_type": "MobileKT v4 stateful MIKT KT-Engine",
+  "onnx_models": {
+    "predict": {
+      "file": "mobile_mikt_predict.onnx",
+      "onnx_opset": 18,
+      "inputs": {
+        "question_embedding": {
+          "dtype": "float32",
+          "shape": [
+            "batch",
+            64
+          ]
+        },
+        "difficulty": {
+          "dtype": "float32",
+          "shape": [
+            "batch"
+          ]
+        },
+        "concept_ids": {
+          "dtype": "int64",
+          "shape": [
+            "batch",
+            10
+          ],
+          "padding_value": -1
+        },
+        "skill_state": {
+          "dtype": "float32",
+          "shape": [
+            "batch",
+            641,
+            64
+          ]
+        },
+        "all_state": {
+          "dtype": "float32",
+          "shape": [
+            "batch",
+            64
+          ]
+        },
+        "last_skill_time": {
+          "dtype": "float32",
+          "shape": [
+            "batch",
+            641
+          ]
+        },
+        "step": {
+          "dtype": "float32",
+          "shape": [
+            "batch"
+          ]
+        }
+      },
+      "outputs": {
+        "pred_correct": {
+          "dtype": "float32",
+          "shape": [
+            "batch"
+          ],
+          "range": [
+            0.0,
+            1.0
+          ]
+        }
+      }
+    },
+    "update": {
+      "file": "mobile_mikt_update.onnx",
+      "onnx_opset": 18,
+      "inputs": {
+        "question_embedding": {
+          "dtype": "float32",
+          "shape": [
+            "batch",
+            64
+          ]
+        },
+        "difficulty": {
+          "dtype": "float32",
+          "shape": [
+            "batch"
+          ]
+        },
+        "concept_ids": {
+          "dtype": "int64",
+          "shape": [
+            "batch",
+            10
+          ],
+          "padding_value": -1
+        },
+        "response": {
+          "dtype": "int64",
+          "shape": [
+            "batch"
+          ],
+          "values": {
+            "incorrect": 0,
+            "correct": 1
+          }
+        },
+        "skill_state": {
+          "dtype": "float32",
+          "shape": [
+            "batch",
+            641,
+            64
+          ]
+        },
+        "all_state": {
+          "dtype": "float32",
+          "shape": [
+            "batch",
+            64
+          ]
+        },
+        "last_skill_time": {
+          "dtype": "float32",
+          "shape": [
+            "batch",
+            641
+          ]
+        },
+        "step": {
+          "dtype": "float32",
+          "shape": [
+            "batch"
+          ]
+        }
+      },
+      "outputs": {
+        "next_skill_state": {
+          "dtype": "float32",
+          "shape": [
+            "batch",
+            641,
+            64
+          ]
+        },
+        "next_all_state": {
+          "dtype": "float32",
+          "shape": [
+            "batch",
+            64
+          ]
+        },
+        "next_last_skill_time": {
+          "dtype": "float32",
+          "shape": [
+            "batch",
+            641
+          ]
+        }
+      }
+    }
+  },
+  "call_order": [
+    "Load or initialize local user state.",
+    "Call QE server or local cache to get question_embedding, difficulty, and concept_ids.",
+    "Run mobile_mikt_predict.onnx before the learner answers.",
+    "After the answer is known, run mobile_mikt_update.onnx and persist returned state tensors.",
+    "Increment the app-side step counter by one."
+  ]
+}

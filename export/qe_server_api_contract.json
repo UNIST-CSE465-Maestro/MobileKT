@@ -1,0 +1,50 @@
+{
+  "schema_version": "1.0",
+  "service_name": "MobileKT Question Representation Service",
+  "endpoint": {
+    "method": "POST",
+    "path": "/v1/question/encode"
+  },
+  "request": {
+    "content_type": "application/json",
+    "body": {
+      "question": "string",
+      "options": [
+        {
+          "label": "string",
+          "text": "string"
+        }
+      ],
+      "visual_description": "string optional",
+      "concept_keys": [
+        "string optional"
+      ],
+      "question_type": "string optional",
+      "client_question_id": "string optional"
+    }
+  },
+  "response": {
+    "content_type": "application/json",
+    "body": {
+      "question_hash": "string",
+      "qe_model_version": "string",
+      "mikt_compatibility_version": "string",
+      "embedding_dim": 64,
+      "embedding_dtype": "float32",
+      "question_embedding": [
+        "float32 length 64"
+      ],
+      "difficulty": "float32 scalar",
+      "concept_ids": [
+        "int64, length <= max_concepts_per_question"
+      ],
+      "concept_keys": [
+        "string"
+      ]
+    }
+  },
+  "caching": {
+    "cache_key": "question_hash + qe_model_version + mikt_compatibility_version",
+    "client_can_cache": true
+  }
+}

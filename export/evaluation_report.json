@@ -1,0 +1,33 @@
+{
+  "schema_version": "1.0",
+  "model": "MobileKT v4 QE-E2E+Teacher",
+  "dataset": "statics2011",
+  "split": "student-level random split, seed 42",
+  "checkpoint": "/workspace/maestro/MobileKT/experiments/statics2011_qe_e2e_teacher_guided_best_20260528/qe_seed2024_lr1e-03_dp0p1/statics2011_qe_trainable_id_seed2024_lr1e-03_dp0p1_seed2024_lr1e-03_dp0.1_q1_d1_logit1_kt1/qe_distill_best.pt",
+  "metrics_source": "/workspace/maestro/MobileKT/experiments/statics2011_qe_e2e_teacher_guided_best_20260528/qe_seed2024_lr1e-03_dp0p1/statics2011_qe_trainable_id_seed2024_lr1e-03_dp0p1_seed2024_lr1e-03_dp0.1_q1_d1_logit1_kt1/metrics.json",
+  "test": {
+    "auc": 0.8445290001700889,
+    "acc": 0.8430973291397095,
+    "kt_loss": 0.34881502389907837,
+    "q_mse": 0.8279672236573791,
+    "diff_mse": 0.26021320498233186,
+    "q_cos": 0.10857500974419108,
+    "diff_pearson": 0.6148977279663086,
+    "logit_mse": 0.21677579667617194
+  },
+  "best_val": {
+    "auc": 0.8378842924001025,
+    "acc": 0.8291475176811218,
+    "kt_loss": 0.3781108260154724,
+    "q_mse": 0.8306119974832953,
+    "diff_mse": 0.2606891801786146,
+    "q_cos": 0.11000742609605274,
+    "diff_pearson": 0.6124494075775146,
+    "logit_mse": 0.21861203668983656
+  },
+  "notes": [
+    "This is not yet an unseen-question split result.",
+    "pred_correct is calibrated only to the current student-level split.",
+    "App-facing mastery should come from TAP/readout in a later export, not directly from skill_state vector values."
+  ]
+}

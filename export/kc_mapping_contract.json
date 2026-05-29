@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0",
+  "concept_id_map": "concept_id_map.json",
+  "concept_catalog": "concept_catalog.json",
+  "concept_id_base": 1,
+  "padding_values": {
+    "concept_ids_input_padding": -1,
+    "state_padding_concept_column": 0
+  },
+  "max_concepts_per_question": 10,
+  "rules": [
+    "Every concept id sent to the mobile ONNX engine must exist in concept_id_map.json.",
+    "Pad unused concept slots with -1.",
+    "State column 0 is reserved and must not be displayed as a real concept.",
+    "Generated-question services should return concept keys and ids together for debugging."
+  ]
+}

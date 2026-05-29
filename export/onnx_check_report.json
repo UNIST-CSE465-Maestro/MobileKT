@@ -1,0 +1,52 @@
+{
+  "schema_version": "1.0",
+  "models": {
+    "predict": {
+      "file": "mobile_mikt_predict.onnx",
+      "checker": "passed",
+      "opsets": [
+        {
+          "domain": "",
+          "version": 18
+        }
+      ],
+      "inputs": [
+        "question_embedding",
+        "difficulty",
+        "concept_ids",
+        "skill_state",
+        "all_state",
+        "last_skill_time",
+        "step"
+      ],
+      "outputs": [
+        "pred_correct"
+      ]
+    },
+    "update": {
+      "file": "mobile_mikt_update.onnx",
+      "checker": "passed",
+      "opsets": [
+        {
+          "domain": "",
+          "version": 18
+        }
+      ],
+      "inputs": [
+        "question_embedding",
+        "difficulty",
+        "concept_ids",
+        "response",
+        "skill_state",
+        "all_state",
+        "last_skill_time",
+        "step"
+      ],
+      "outputs": [
+        "next_skill_state",
+        "next_all_state",
+        "next_last_skill_time"
+      ]
+    }
+  }
+}

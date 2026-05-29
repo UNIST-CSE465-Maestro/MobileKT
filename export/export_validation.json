@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.0",
+  "purpose": "Golden fixture for app-side ONNX Runtime wiring.",
+  "sample_input": "validation_sample_input.json",
+  "initial_state": "mobile_mikt_initial_state.npz",
+  "expected_update_state": "validation_expected_update_state.npz",
+  "expected": {
+    "pred_correct": 0.8227500915527344,
+    "next_skill_state_sha256": "480cd11f2fd3ebae33cc000202a4049fbc5da69c698ceea58aaa9fe8e9b4244f",
+    "next_all_state_sha256": "2860a2a287ab6570c595d56d0deb22efcb724fb0e82e0384800f7bd21950c4d3",
+    "next_last_skill_time_sha256": "a3cab394e53f55926b1548e6614bc98ea877ba045e4269a5766e29920715b584",
+    "next_skill_state_l2_norm": 10.058053970336914,
+    "next_all_state_l2_norm": 3.103965997695923,
+    "updated_concept_ids": [
+      593
+    ]
+  },
+  "tolerance": {
+    "pred_correct_abs": 1e-05,
+    "state_element_abs": 1e-05
+  }
+}

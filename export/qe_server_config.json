@@ -1,0 +1,11 @@
+{
+  "schema_version": "1.0",
+  "question_encoder_class": "MIKTQuestionEncoder",
+  "input_mode": "features",
+  "feature_dim": 1024,
+  "output_embedding_dim": 64,
+  "output_difficulty_shape": [
+    "batch"
+  ],
+  "checkpoint": "qe_server_question_encoder.pt"
+}

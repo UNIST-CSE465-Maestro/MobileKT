@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.0",
+  "stateful_mobile_engine": true,
+  "state_files": {
+    "initial_state": "mobile_mikt_initial_state.npz"
+  },
+  "state_tensors": {
+    "skill_state": {
+      "dtype": "float32",
+      "shape": [
+        "batch",
+        641,
+        64
+      ]
+    },
+    "all_state": {
+      "dtype": "float32",
+      "shape": [
+        "batch",
+        64
+      ]
+    },
+    "last_skill_time": {
+      "dtype": "float32",
+      "shape": [
+        "batch",
+        641
+      ]
+    }
+  },
+  "state_semantics": {
+    "skill_state": "Per-concept latent knowledge vector. This is not directly user-facing mastery.",
+    "all_state": "Global student latent state used by MIKT prediction/update.",
+    "last_skill_time": "Per-concept last update step for elapsed-step forgetting."
+  },
+  "client_storage": {
+    "one_state_per_user_profile": true,
+    "increment_step_after_each_answer": true,
+    "reset_by_reloading_initial_state": true
+  }
+}
