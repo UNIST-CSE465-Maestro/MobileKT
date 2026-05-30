@@ -1,14 +1,4 @@
 # 모델 아키텍처 설계 (Model Architecture Design)
-
-상태: 진행 중
-담당자: UnknwonH
-마감일: 04/16/2026
-
-- [ ]  Implement KT-Engine in mobile device (with 세한)
-    - [ ]  Statics 2011 데이터셋 분석 및 Environment Setup
-- [ ]  Question Encoder 구체화
-- [ ]  TAP 보강 및 발전 시키기
-
 ## 0. Introduction
 
 [Previous MobileKT Architecture (Scalar Hidden Mastery state)](https://www.notion.so/Previous-MobileKT-Architecture-Scalar-Hidden-Mastery-state-35e95612494780939e50c24b0c86cb31?pvs=21)
@@ -81,6 +71,142 @@ Learning for Knowledge Tracing) Framework:**
 
 ### 1-2. TAP(Time-Aware Probe) Module
 
+TAP(Time-Aware Probe)는 MobileKT에서 사용자의 지식 수준을 직접 업데이트하는 backbone이 아니라, 이미 학습된 KT backbone의 latent Knowledge State를 concept별 mastery score로 읽어내는 해석 모듈이다. 기존 scalar-state MobileKT 설계에서는 모델 내부 state 자체를 처음부터 $[0, 1]$ 범위의 mastery 값으로 두었기 때문에 해석은 쉬웠지만, MIKT 대비 예측 성능이 크게 하락하였다. 반대로 MIKT는 강한 prediction 성능과 concept-specific state matrix를 제공하지만, 각 concept state vector가 학생의 실제 숙련도를 몇 퍼센트로 의미하는지는 바로 알기 어렵다. TAP은 이 두 문제 사이의 절충안으로, **MIKT의 다차원 Knowledge State는 그대로 유지하면서 그 안에 담긴 mastery 정보를 post-hoc readout으로 추출**하는 역할을 한다.
+
+즉 본 연구에서 TAP이 답하려는 질문은 다음과 같다.
+
+$$
+\text{Does the frozen KT knowledge state contain decodable concept-level mastery information?}
+$$
+
+이를 위해 MIKT 또는 ReKT 같은 pretrained backbone은 freeze하고, TAP만 별도로 학습한다. 이 설계는 backbone의 prediction 능력을 훼손하지 않으면서, hidden state 안에 concept별 숙련도 정보가 얼마나 안정적으로 담겨 있는지를 검증할 수 있게 한다.
+
+$$
+\text{Frozen KT State}_{t}(c) + \text{Concept}_{c} + \text{Timer}_{t}(c)
+\rightarrow \text{TAP}
+\rightarrow {Mastery}_{t}(c)
+$$
+
+여기서 ${Mastery}_{t}(c)$는 심리학적으로 관측된 절대적인 "true mastery"가 아니라, KT state로부터 읽어낸 **operational mastery readout**이다. 즉 "학생이 이 concept을 본질적으로 얼마나 이해했는가"를 직접 관측할 수 없기 때문에, 본 연구에서는 가까운 미래의 same-concept correctness를 기반으로 supervision label을 구성하고, 그 label을 잘 예측하는 calibrated concept-level readout을 mastery로 해석한다.
+
+TAP의 기본 입력은 아래와 같다.
+
+| Input | Description |
+| --- | --- |
+| `hidden_state_t(c)` | frozen KT backbone에서 추출한 concept-specific latent state |
+| `concept_id` | 어떤 KC에 대한 mastery를 읽을지 나타내는 concept index |
+| `timer_features_t(c)` | 해당 concept의 elapsed gap, seen count, recent correctness 등 past-only time feature |
+
+MIKT 기반 TAP에서는 concept별 state가 비교적 자연스럽게 정의된다. MIKT는 각 concept에 대응되는 `skill_state` matrix를 유지하고, 동시에 학생의 전체 학습 상태를 나타내는 `all_state`를 가진다. TAP pilot에서는 각 concept $c$에 대해 다음처럼 concept-aligned state를 구성한다.
+
+$$
+h_{t,c}^{TAP} = [all\_state_t; skill\_state_t(c)]
+$$
+
+이 구조는 단일 global hidden vector만 사용하는 DKT류 모델보다 MobileKT의 mastery readout 주장에 더 적합하다. 특정 concept $c$에 대응되는 latent state row가 존재하기 때문에, TAP은 "global sequence summary에서 concept을 억지로 분리"하는 것이 아니라, MIKT가 유지하는 concept-specific state를 직접 읽는다.
+
+Timer feature는 forgetting과 practice history를 반영하기 위해 사용한다. 현재 구현 기준으로 concept $c$에 대해 아래 세 가지 feature를 만든다.
+
+| Timer Feature | Meaning |
+| --- | --- |
+| $\log(1 + gap_{t,c})$ | concept $c$가 마지막으로 관측된 이후 지난 step 수 |
+| $\log(1 + count_{t,c})$ | 지금까지 concept $c$가 관측된 횟수 |
+| $recent\_correct_{t,c}$ | 최근 window 안에서 concept $c$를 맞힌 비율 |
+
+중요한 점은 timer feature가 반드시 **past-only**여야 한다는 것이다. TAP이 미래 correctness를 label로 사용하기 때문에, timer feature에 미래 interaction 정보가 들어가면 leakage가 발생한다. 따라서 $\text{Timer}_{t}(c)$는 시점 $t$까지의 interaction만으로 계산한다.
+
+TAP 학습을 위한 label은 직접 주어진 mastery annotation이 아니라 future same-concept correctness로 만든다. 시점 $t$에서 concept $c$에 대한 label은 horizon $H$ 안에서 같은 concept $c$가 다시 등장했을 때의 정답 여부를 평균한 값이다. 기본 setting에서는 가까운 미래 interaction에 더 큰 weight를 주기 위해 exponential decay average를 사용한다.
+
+$$
+y_{t,c}^{TAP}
+= \frac{\sum_{j=t+1}^{t+H} \mathbb{1}[c \in C_j]\exp(-(j-t)/\tau)r_j}
+{\sum_{j=t+1}^{t+H} \mathbb{1}[c \in C_j]\exp(-(j-t)/\tau)}
+$$
+
+여기서 $r_j$는 학생이 시점 $j$에서 정답을 맞혔는지 나타내는 binary response이다. 이 label은 "현재 concept mastery가 높으면 가까운 미래에 같은 concept 문제를 맞힐 가능성이 높다"는 operational definition에 기반한다. 따라서 TAP 출력은 엄밀히 말하면 다음 값에 가깝다.
+
+$$
+{Mastery}_{t}(c)
+\approx P(\text{future correct on concept } c \mid \text{KT state at } t)
+$$
+
+같은 concept이 horizon 안에 다시 등장하지 않는 경우는 label을 0으로 두지 않는다. 이는 "학생이 틀렸다"는 의미가 아니라 "관측되지 않았다"는 의미이므로, 해당 sample은 mask out한다. 이 처리는 TAP이 unobserved concept을 incorrect로 오해하지 않도록 하기 위한 핵심 설계이다.
+
+현재 TAP module은 두 가지 형태로 구현되어 있다.
+
+| Probe | Form | Purpose |
+| --- | --- | --- |
+| `TimeAwareProbe` | MLP readout | hidden state, concept embedding, timer feature를 결합해 flexible mastery readout 학습 |
+| `EbbinghausTimeAwareProbe` | structured forgetting readout | elapsed gap이 증가할 때 mastery가 임의로 증가하지 않도록 forgetting prior 부여 |
+
+기본 MLP TAP은 다음과 같이 동작한다.
+
+$$
+\widehat{m}_{t,c}
+= \sigma(MLP([h_{t,c}^{TAP}; e_c; timer_{t,c}]))
+$$
+
+이 방식은 표현력이 높고, frozen KT state 안에 담긴 mastery signal을 유연하게 읽을 수 있다. 반면 forgetting 방향성이 구조적으로 보장되지는 않기 때문에, gap이 길어질 때 mastery가 어떻게 변하는지는 학습 결과와 regularization에 의존한다.
+
+Ebbinghaus-TAP은 time gap의 영향을 더 명시적으로 분리한다.
+
+$$
+\widehat{m}_{t,c}
+= \sigma(base\_logit(h_{t,c}, c, timer_{\neg gap})
+- decay\_rate(h_{t,c}, c, timer_{\neg gap}) \cdot \log(1 + gap_{t,c}))
+$$
+
+여기서 $decay\_rate \ge 0$이 되도록 parameterization하기 때문에, 동일한 hidden state에서 elapsed gap만 증가시키면 mastery가 증가하지 않는다. 이는 Ebbinghaus forgetting curve를 hard-coded constant로 넣는 것이 아니라, 학생 상태와 concept에 따라 personalized decay rate를 학습하는 방식이다.
+
+학습 objective는 future same-concept label에 대한 soft binary cross entropy를 기본으로 한다.
+
+$$
+L_{future}
+= BCE(\widehat{m}_{t,c}, y_{t,c}^{TAP})
+$$
+
+추가적으로 다음과 같은 weak regularization을 붙일 수 있다.
+
+| Regularization | Intuition |
+| --- | --- |
+| Direction loss | correct response 이후 관련 concept mastery는 증가하고, incorrect response 이후 감소하도록 유도 |
+| Forgetting monotonic loss | 같은 state에서 gap만 길어졌을 때 mastery가 증가하지 않도록 유도 |
+| Smoothness loss | 직접 관측이 없는 concept의 mastery가 불필요하게 급변하지 않도록 유도 |
+
+따라서 TAP의 전체 목적은 단순히 MIKT의 최종 prediction을 복제하는 것이 아니다. TAP은 frozen backbone state에서 concept-level mastery를 읽는 모듈이며, 그 mastery가 future same-concept correctness와 calibration 측면에서 의미 있는지를 검증한다.
+
+$$
+L_{TAP}
+= L_{future}
++ \lambda_{dir}L_{direction}
++ \lambda_{forget}L_{forgetting}
++ \lambda_{smooth}L_{smooth}
+$$
+
+초기 pilot 실험에서는 Statics2011 fold 0, seed 42 기준으로 MIKT 기반 TAP이 ReKT 기반 TAP보다 calibration 측면에서 유리한 신호를 보였다.
+
+| Base Model | Probe | AUC | Brier | ECE |
+| --- | --- | ---: | ---: | ---: |
+| ReKT | MLP time | 0.7496 | 0.1036 | 0.0436 |
+| ReKT | Ebbinghaus + loss | 0.7529 | 0.1018 | 0.0325 |
+| MIKT | MLP time | 0.7589 | 0.0993 | 0.0138 |
+| MIKT | Ebbinghaus + loss | 0.7522 | 0.0984 | 0.0149 |
+
+이 결과는 architecture 선택의 보충적인 근거로써도 활용하였다. 특히 MIKT는 concept-specific state matrix를 직접 제공하기 때문에, TAP이 concept별 mastery를 안정적으로 읽기에 가장 자연스러운 backbone이다. 다만 Ebbinghaus 구조가 항상 전체 지표를 개선하는 것은 아니며, very-long gap bucket에는 이미 mastery가 높은 concept이 섞일 수 있다. 따라서 "gap이 길면 무조건 낮은 mastery"라는 단순 가정은 부적절하고, 학생/개념/상태에 따라 decay rate가 달라지는 personalized forgetting model이 필요하다.
+
+최종적으로 본 연구에서 TAP은 다음 역할을 담당한다.
+
+| Role | Description |
+| --- | --- |
+| Interpretability | 다차원 KT state를 concept별 scalar mastery로 변환 |
+| Calibration | mastery score가 future correctness probability로 해석 가능한지 검증 |
+| Time awareness | elapsed gap과 recent correctness를 반영해 forgetting-sensitive readout 제공 |
+| Backbone diagnosis | MIKT/ReKT 등 backbone state가 mastery 정보를 얼마나 담는지 비교 |
+| Mobile UX | on-device 학습 앱에서 concept별 숙련도와 약점 진단을 제공 |
+
+따라서 TAP은 MobileKT에서 부가적인 visualization head가 아니라, "strong KT model의 prediction 성능을 유지하면서도 학생에게 설명 가능한 concept-level knowledge state를 제공할 수 있는가"를 검증하는 핵심 모듈이다.
+
+*TAP 관련 세부 연구문서 (Appendix):*
 [Time-Aware Probing Module for Interpretable Knowledge Tracing](https://www.notion.so/Time-Aware-Probing-Module-for-Interpretable-Knowledge-Tracing-35a95612494780818875e903c3b5b878?pvs=21)
 
 ### 1-3. Question Encoder
