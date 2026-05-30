@@ -28,6 +28,25 @@ Mobile
 
 The mobile app should not run Harrier. The app owns and persists the MIKT state.
 
+Important distinction:
+
+```text
+Harrier model:
+  external frozen text/image-question feature encoder
+
+qe_server_question_encoder.pt:
+  trained MobileKT QE head that maps Harrier feature[1024]
+  -> MIKT-compatible question_embedding[64] and difficulty
+
+mobile_mikt_*.onnx:
+  trained stateful mobile KT engine
+```
+
+For existing Statics2011 benchmark questions, `question_harrier_features.pt`
+was used during training as a precomputed Harrier feature cache. For new or
+generated questions, the server must run Harrier at request time or use a
+server-side representation cache.
+
 ## Core Files
 
 | file | role |
@@ -78,6 +97,16 @@ Column `0` in state tensors is reserved for padding. Do not display it as a real
 7. Persist `next_skill_state`, `next_all_state`, `next_last_skill_time`.
 8. Increment the local `step`.
 
+The app should cache QE output by:
+
+```text
+question_hash + qe_model_version + mikt_compatibility_version
+```
+
+This representation cache is item-level data, not student state. It can be
+shared across learner profiles on the same device. The MIKT state tensors are
+student-specific and must be stored separately.
+
 ## ONNX Inputs
 
 See `mikt_predict_contract.json` for the exact contract. Summary:
@@ -95,12 +124,116 @@ step:               float32 [batch]
 
 The exported ONNX models use opset 18 and passed `onnx.checker`.
 
+## Server Runtime
+
+The server implementation is under:
+
+```text
+maestro/MobileKT/server/
+```
+
+Run it inside the Maestro Docker container:
+
+```bash
+cd /workspace/maestro/MobileKT
+tools/run_qe_server.sh
+```
+
+By default this starts:
+
+```text
+host: 0.0.0.0
+port: 8091
+feature mode: harrier
+```
+
+If Harrier is not already cached in the container, allow the first request to
+download it:
+
+```bash
+MOBILEKT_QE_ALLOW_MODEL_DOWNLOAD=1 tools/run_qe_server.sh
+```
+
+From the host machine, a convenient detached launch command is:
+
+```bash
+docker exec -d maestro_docker bash -lc '
+cd /workspace/maestro/MobileKT
+MOBILEKT_QE_HOST=0.0.0.0 \
+MOBILEKT_QE_PORT=8091 \
+MOBILEKT_QE_ALLOW_MODEL_DOWNLOAD=1 \
+tools/run_qe_server.sh > /tmp/mobilekt_qe_server.log 2>&1
+'
+```
+
+Check server status:
+
+```bash
+curl http://127.0.0.1:8091/healthz
+```
+
+Expected shape:
+
+```json
+{
+  "status": "ok",
+  "service": "mobilekt-qe",
+  "qe_model_version": "qe-harrier-mobilekt4-d82c7b882b72",
+  "mikt_compatibility_version": "mobilekt4-stat-20260528-qe-e2e-teacher-seed2024-dp0.1",
+  "feature_mode": "harrier",
+  "feature_dim": 1024,
+  "embedding_dim": 64,
+  "n_concepts": 640
+}
+```
+
+For LAN/mobile testing, use the server host IP:
+
+```text
+http://<server-lan-ip>:8091
+```
+
+Example:
+
+```text
+http://192.168.0.2:8091
+```
+
+Docker compose publishes:
+
+```text
+0.0.0.0:8091 -> container:8091
+```
+
+If `curl http://127.0.0.1:8091/healthz` fails on the host but works inside the
+container, recreate the container with the updated compose file:
+
+```bash
+cd /home/hserver/workspace
+docker compose -f maestro/docker/docker-compose.yaml up -d --force-recreate --no-deps blackwell-dev
+```
+
+For a lightweight wiring test without loading Harrier, use:
+
+```bash
+MOBILEKT_QE_FEATURE_MODE=hash MOBILEKT_QE_DEVICE=cpu tools/run_qe_server.sh
+```
+
+`hash` mode is deterministic and useful for API/mobile wiring tests only. It is
+not valid for research metrics or product predictions.
+
 ## Server Contract
 
 The app should call:
 
 ```text
 POST /v1/question/encode
+```
+
+or batch-prefetch a lesson with:
+
+```text
+POST /v1/question/encode-batch
 ```
 
 The response must include:
@@ -114,6 +247,227 @@ mikt_compatibility_version
 ```
 
 The `difficulty` value is MIKT internal latent difficulty. It is not Bloom difficulty.
+
+The current exported QE head does not infer concept IDs by itself. The request
+must include `concept_keys` or `concept_ids`, and the server validates them
+against `concept_id_map.json`. Unknown concepts are rejected instead of being
+silently guessed, because incorrect concept IDs would contaminate the learner's
+local state.
+
+### Single Question Request
+
+```bash
+curl -X POST http://127.0.0.1:8091/v1/question/encode \
+  -H "Content-Type: application/json" \
+  -d '{
+    "client_question_id": "lesson1-q1",
+    "question": "Which coordinate can be determined by inspection, using symmetry? x_G",
+    "options": [
+      {"label": "yes", "text": "Yes"},
+      {"label": "no", "text": "No"}
+    ],
+    "visual_description": "",
+    "concept_keys": ["find_symmetry_plane"],
+    "question_type": "multiple_choice",
+    "mikt_compatibility_version": "mobilekt4-stat-20260528-qe-e2e-teacher-seed2024-dp0.1"
+  }'
+```
+
+Response shape:
+
+```json
+{
+  "question_hash": "3f0ad13d81af2478528df932bb514b9ccc7d672705537752bd7f798f941e178e",
+  "representation_id": "22a82c98eff5427343f7c11d407dec7f176a62f484e7b4670e237532aac50421",
+  "qe_model_version": "qe-harrier-mobilekt4-d82c7b882b72",
+  "mikt_compatibility_version": "mobilekt4-stat-20260528-qe-e2e-teacher-seed2024-dp0.1",
+  "embedding_dim": 64,
+  "embedding_dtype": "float32",
+  "question_embedding": ["64 float32 values"],
+  "difficulty": -1.018261194229126,
+  "concept_ids": [583],
+  "concept_keys": ["find_symmetry_plane"],
+  "max_concepts_per_question": 10,
+  "feature_encoder": "microsoft/harrier-oss-v1-0.6b",
+  "feature_mode": "harrier"
+}
+```
+
+The mobile app should convert:
+
+```text
+concept_ids: [583]
+```
+
+to:
+
+```text
+concept_ids: int64 [1, 10] = [[583, -1, -1, -1, -1, -1, -1, -1, -1, -1]]
+```
+
+### Batch Prefetch Request
+
+Use this before a lesson to reduce latency and support offline answering for
+already-prefetched questions.
+
+```bash
+curl -X POST http://127.0.0.1:8091/v1/question/encode-batch \
+  -H "Content-Type: application/json" \
+  -d '{
+    "mikt_compatibility_version": "mobilekt4-stat-20260528-qe-e2e-teacher-seed2024-dp0.1",
+    "questions": [
+      {
+        "client_question_id": "lesson1-q1",
+        "question": "Which coordinate can be determined by inspection, using symmetry? x_G",
+        "options": [
+          {"label": "yes", "text": "Yes"},
+          {"label": "no", "text": "No"}
+        ],
+        "concept_keys": ["find_symmetry_plane"]
+      },
+      {
+        "client_question_id": "lesson1-q2",
+        "question": "Compute the centroid of the composite area.",
+        "options": [],
+        "concept_keys": ["centroid_of_composite_area"]
+      }
+    ]
+  }'
+```
+
+Response shape:
+
+```json
+{
+  "items": [
+    {
+      "client_question_id": "lesson1-q1",
+      "status": "ok",
+      "question_hash": "string",
+      "representation_id": "string",
+      "question_embedding": ["64 float32 values"],
+      "difficulty": -1.0,
+      "concept_ids": [583],
+      "concept_keys": ["find_symmetry_plane"]
+    }
+  ],
+  "qe_model_version": "qe-harrier-mobilekt4-d82c7b882b72",
+  "mikt_compatibility_version": "mobilekt4-stat-20260528-qe-e2e-teacher-seed2024-dp0.1"
+}
+```
+
+Each batch item has its own `status`. A malformed item can fail while other
+items succeed.
+
+### Common Server Errors
+
+Missing concept metadata:
+
+```json
+{
+  "error": {
+    "code": "missing_concepts",
+    "message": "concept_keys or concept_ids are required; current QE does not infer concepts."
+  }
+}
+```
+
+Unknown concept:
+
+```json
+{
+  "error": {
+    "code": "unknown_concept_key",
+    "message": "Unknown concept key: ..."
+  }
+}
+```
+
+Version mismatch:
+
+```json
+{
+  "error": {
+    "code": "incompatible_mikt_version",
+    "message": "Requested ..., server serves ..."
+  }
+}
+```
+
+Missing Harrier dependencies or cache:
+
+```json
+{
+  "error": {
+    "code": "internal_error",
+    "message": "No module named 'transformers'"
+  }
+}
+```
+
+Fix by rebuilding the Docker image with the updated `maestro/docker/Dockerfile`
+or installing `transformers` in the running container. If the model itself is
+missing, run the server with `MOBILEKT_QE_ALLOW_MODEL_DOWNLOAD=1`.
+
+## Mobile ONNX Wiring
+
+After receiving a successful QE response, the app calls the mobile ONNX models.
+
+### Predict Before Answer
+
+Inputs to `mobile_mikt_predict.onnx`:
+
+```text
+question_embedding: float32 [1, 64]
+difficulty:         float32 [1]
+concept_ids:        int64   [1, 10]
+skill_state:        float32 [1, 641, 64]
+all_state:          float32 [1, 64]
+last_skill_time:    float32 [1, 641]
+step:               float32 [1]
+```
+
+Output:
+
+```text
+pred_correct: float32 [1]
+```
+
+### Update After Answer
+
+Inputs to `mobile_mikt_update.onnx`:
+
+```text
+question_embedding: float32 [1, 64]
+difficulty:         float32 [1]
+concept_ids:        int64   [1, 10]
+response:           int64   [1]      correct=1, incorrect=0
+skill_state:        float32 [1, 641, 64]
+all_state:          float32 [1, 64]
+last_skill_time:    float32 [1, 641]
+step:               float32 [1]
+```
+
+Outputs:
+
+```text
+next_skill_state:      float32 [1, 641, 64]
+next_all_state:        float32 [1, 64]
+next_last_skill_time:  float32 [1, 641]
+```
+
+Then persist:
+
+```text
+skill_state = next_skill_state
+all_state = next_all_state
+last_skill_time = next_last_skill_time
+step = step + 1
+```
+
+State writes should be atomic with the local answer event. If the app crashes
+after the learner answers but before state persistence, the event/state pair
+can diverge.
 
 ## Validation Fixture
 

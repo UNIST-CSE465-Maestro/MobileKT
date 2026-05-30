@@ -10,6 +10,7 @@ MobileKT/
 ├── train.py
 ├── datasets/
 ├── models/
+├── server/
 ├── tools/
 ├── utils/
 └── material/
@@ -85,6 +86,28 @@ Experiment and preprocessing scripts.
 - `run_statics2011_v4_compare.py`  
   Runs repeated MobileKT v4 comparisons between ID embedding and Harrier QE settings.
 
+- `train_qe_distill.py`  
+  Trains a Harrier-feature Question Encoder against a MIKT-ID teacher. Supports frozen-backbone QE distillation and trainable-backbone teacher-guided joint fine-tuning.
+
+- `run_statics2011_qe_distill.py`  
+  Launches repeated Statics2011 QE distillation or teacher-guided joint runs from the saved ID-teacher checkpoints.
+
+- `run_qe_server.sh`  
+  Starts the server-side Question Encoder API for mobile app integration.
+
+### `server/`
+
+Server-side Question Encoder runtime for mobile apps.
+
+- `service.py`  
+  Loads the exported QE head, Harrier feature encoder, compatibility metadata, and concept map.
+
+- `app.py`  
+  Exposes `GET /healthz`, `POST /v1/question/encode`, and `POST /v1/question/encode-batch` through a stdlib HTTP server.
+
+- `golden_test.py`  
+  Smoke test for API wiring and exported QE compatibility.
+
 ### `utils/`
 
 Shared utility functions.
@@ -144,3 +167,56 @@ python train.py \
   --device cuda
 ```
 
+Train the MIKT-first frozen-backbone Question Encoder distillation setting:
+
+```bash
+python tools/run_statics2011_qe_distill.py \
+  --preset best \
+  --teacher_session statics2011_v4_compare_20260526_dropout \
+  --session statics2011_qe_distill_best \
+  --gpus 0
+```
+
+Use `--preset core` for all three seeds at dropout 0.2, or `--preset dropout` to mirror the earlier seed/dropout grid.
+
+Train the teacher-guided joint setting:
+
+```bash
+python tools/run_statics2011_qe_distill.py \
+  --preset best \
+  --teacher_session statics2011_v4_compare_20260526_dropout \
+  --session statics2011_qe_e2e_teacher_guided_best \
+  --gpus 0 \
+  --backbone_mode trainable \
+  --kt_loss_weight 1.0 \
+  --q_loss_weight 1.0 \
+  --diff_loss_weight 1.0 \
+  --logit_loss_weight 1.0
+```
+
+## Mobile QE Server
+
+Run inside the Maestro Docker container:
+
+```bash
+cd /workspace/maestro/MobileKT
+tools/run_qe_server.sh
+```
+
+The Docker compose file publishes port `8091`, so after recreating the
+container the mobile app can call:
+
+```text
+GET  http://<host-ip>:8091/healthz
+POST http://<host-ip>:8091/v1/question/encode
+POST http://<host-ip>:8091/v1/question/encode-batch
+```
+
+For a lightweight wiring test without loading Harrier:
+
+```bash
+MOBILEKT_QE_FEATURE_MODE=hash MOBILEKT_QE_DEVICE=cpu tools/run_qe_server.sh
+```
+
+`hash` mode is only for integration testing. Product/research runs should use
+the default Harrier mode.
