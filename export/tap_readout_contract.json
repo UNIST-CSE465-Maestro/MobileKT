@@ -1,0 +1,87 @@
+{
+  "schema_version": "1.0",
+  "model": "MobileKT v4 post-hoc TAP mastery readout",
+  "file": "mobile_tap_readout.onnx",
+  "initial_stats": "mobile_tap_initial_stats.npz",
+  "inputs": {
+    "skill_state": {
+      "dtype": "float32",
+      "shape": [
+        "batch",
+        641,
+        64
+      ]
+    },
+    "all_state": {
+      "dtype": "float32",
+      "shape": [
+        "batch",
+        64
+      ]
+    },
+    "last_skill_time": {
+      "dtype": "float32",
+      "shape": [
+        "batch",
+        641
+      ]
+    },
+    "as_of_step": {
+      "dtype": "float32",
+      "shape": [
+        "batch"
+      ]
+    },
+    "tap_seen_count": {
+      "dtype": "float32",
+      "shape": [
+        "batch",
+        641
+      ]
+    },
+    "tap_recent_correct_rate": {
+      "dtype": "float32",
+      "shape": [
+        "batch",
+        641
+      ]
+    }
+  },
+  "outputs": {
+    "concept_mastery": {
+      "dtype": "float32",
+      "shape": [
+        "batch",
+        641
+      ],
+      "range": [
+        0.0,
+        1.0
+      ],
+      "semantics": "Operational mastery readout. Column 0 is padding and is forced to zero."
+    }
+  },
+  "timer_features": [
+    "log1p(gap_since_last_seen)",
+    "log1p(tap_seen_count)",
+    "tap_recent_correct_rate"
+  ],
+  "timer_semantics": {
+    "gap_since_last_seen": "For seen concepts, max(as_of_step - last_skill_time, 0). For unseen concepts, tap_unseen_gap is used.",
+    "tap_unseen_gap": 201.0,
+    "clock": "Interaction-step index, not wall-clock elapsed time."
+  },
+  "app_profile_storage": {
+    "required": [
+      "tap_seen_count",
+      "a per-concept response ring buffer for deriving tap_recent_correct_rate"
+    ],
+    "recommended_recent_window": 5,
+    "update_rule": "After each completed response, update TAP profile stats once for every unique positive concept_id related to the answered question."
+  },
+  "readout_timing": {
+    "initial_profile": "Use as_of_step=0 with zero tap_seen_count.",
+    "immediately_after_answer": "Run MIKT update with step=t, update TAP stats, then run TAP readout with as_of_step=t. Persist next interaction step as t+1."
+  },
+  "mastery_semantics": "Calibrated operational mastery proxy trained against future same-concept correctness. It is not a directly observed psychological ground-truth label."
+}

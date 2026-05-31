@@ -26,6 +26,7 @@ import numpy as np
 import onnx
 import torch
 import torch.nn as nn
+from onnx.reference import ReferenceEvaluator
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -34,6 +35,7 @@ if str(ROOT) not in sys.path:
 from config import MobileKTConfig
 from datasets.kt_dataset import _parse_csv
 from models import MobileKTV4
+from models.tap import EbbinghausTimeAwareProbe, TimeAwareProbe, TimeAwareProbeConfig
 
 
 DEFAULT_RUN_DIR = (
@@ -47,6 +49,7 @@ DEFAULT_CHECKPOINT = DEFAULT_RUN_DIR / "qe_distill_best.pt"
 DEFAULT_METRICS = DEFAULT_RUN_DIR / "metrics.json"
 DEFAULT_DATA_ROOT = ROOT.parents[1] / "data" / "datasets" / "KT" / "statics2011"
 DEFAULT_OUT_DIR = ROOT / "export"
+DEFAULT_TAP_CHECKPOINT = ROOT / "experiments" / "statics2011_mobilekt4_tap_export" / "mobilekt_v4_tap_best.pt"
 
 
 class MobileMIKTStepBase(nn.Module):
@@ -130,7 +133,7 @@ class MobileMIKTStepBase(nn.Module):
         all_state: torch.Tensor,
         last_skill_time: torch.Tensor,
         step: torch.Tensor,
-    ) -> torch.Tensor:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         decayed_skill, decayed_all = self._decay_for_concepts(
             skill_state, all_state, last_skill_time, concept_ids, step
         )
@@ -149,7 +152,8 @@ class MobileMIKTStepBase(nn.Module):
         ability = torch.sigmoid(
             self.backbone.pro_ability(torch.cat([fused_state, item_embedding], dim=-1)).squeeze(-1)
         )
-        return torch.sigmoid(self.backbone.output_scale * (ability - torch.sigmoid(difficulty)))
+        pred_correct = torch.sigmoid(self.backbone.output_scale * (ability - torch.sigmoid(difficulty)))
+        return pred_correct, alpha
 
     def _update_state(
         self,
@@ -193,7 +197,7 @@ class MobileMIKTPredict(MobileMIKTStepBase):
         all_state: torch.Tensor,
         last_skill_time: torch.Tensor,
         step: torch.Tensor,
-    ) -> torch.Tensor:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         item_embedding = self._build_item_embedding(question_embedding, difficulty, concept_ids)
         return self._predict_from_state(
             item_embedding,
@@ -204,6 +208,55 @@ class MobileMIKTPredict(MobileMIKTStepBase):
             last_skill_time,
             step,
         )
+
+
+class MobileTAPReadout(nn.Module):
+    """ONNX-friendly dense TAP mastery readout over the local MIKT state."""
+
+    def __init__(self, probe: nn.Module, n_concepts: int, state_d: int, unseen_gap: float):
+        super().__init__()
+        self.probe = probe
+        self.n_concepts = n_concepts
+        self.state_d = state_d
+        self.unseen_gap = float(unseen_gap)
+        self.register_buffer(
+            "concept_ids",
+            torch.arange(n_concepts + 1, dtype=torch.long),
+            persistent=False,
+        )
+
+    def forward(
+        self,
+        skill_state: torch.Tensor,
+        all_state: torch.Tensor,
+        last_skill_time: torch.Tensor,
+        as_of_step: torch.Tensor,
+        tap_seen_count: torch.Tensor,
+        tap_recent_correct_rate: torch.Tensor,
+    ) -> torch.Tensor:
+        batch_size = skill_state.shape[0]
+        expanded_all = all_state.unsqueeze(1).expand(-1, self.n_concepts + 1, -1)
+        concept_state = torch.cat([expanded_all, skill_state], dim=-1)
+        as_of_step = as_of_step.to(last_skill_time.dtype).view(-1, 1)
+        seen = tap_seen_count > 0
+        observed_gap = (as_of_step - last_skill_time).clamp_min(0.0)
+        unseen_gap = torch.full_like(observed_gap, self.unseen_gap)
+        gap = torch.where(seen, observed_gap, unseen_gap)
+        timer_features = torch.stack(
+            [
+                torch.log1p(gap),
+                torch.log1p(tap_seen_count.clamp_min(0.0)),
+                tap_recent_correct_rate,
+            ],
+            dim=-1,
+        )
+        mastery = self.probe.forward_concept_states(
+            concept_state,
+            timer_features,
+            self.concept_ids,
+        )
+        valid = (self.concept_ids > 0).to(mastery.dtype).view(1, -1)
+        return mastery * valid.expand(batch_size, -1)
 
 
 class MobileMIKTUpdate(MobileMIKTStepBase):
@@ -250,6 +303,10 @@ def array_digest(arr: np.ndarray) -> str:
     return hashlib.sha256(np.ascontiguousarray(arr).tobytes()).hexdigest()
 
 
+def max_abs_error(actual: np.ndarray, expected: np.ndarray) -> float:
+    return float(np.max(np.abs(actual - expected)))
+
+
 def load_model(checkpoint_path: Path) -> tuple[MobileKTV4, dict[str, Any], dict[str, Any]]:
     ckpt = torch.load(checkpoint_path, map_location="cpu")
     state_dict = ckpt["student_state_dict"] if "student_state_dict" in ckpt else ckpt
@@ -285,6 +342,42 @@ def load_model(checkpoint_path: Path) -> tuple[MobileKTV4, dict[str, Any], dict[
 def load_question_features(path: Path) -> torch.Tensor:
     obj = torch.load(path, map_location="cpu")
     return obj["features"].float() if isinstance(obj, dict) else obj.float()
+
+
+def load_tap_readout(
+    tap_checkpoint_path: Path,
+    backbone_checkpoint_path: Path,
+    n_concepts: int,
+    state_d: int,
+    unseen_gap: float,
+) -> tuple[MobileTAPReadout, dict[str, Any]]:
+    checkpoint = torch.load(tap_checkpoint_path, map_location="cpu", weights_only=False)
+    expected_sha = checkpoint.get("base_checkpoint_sha256")
+    actual_sha = sha256_file(backbone_checkpoint_path)
+    if expected_sha != actual_sha:
+        raise ValueError(
+            "TAP checkpoint is incompatible with the exported MobileKT backbone: "
+            f"expected sha256={expected_sha}, actual sha256={actual_sha}"
+        )
+    if checkpoint.get("base_model_name") != "mobilekt4":
+        raise ValueError("TAP checkpoint was not trained for MobileKT v4")
+    cfg = TimeAwareProbeConfig(**checkpoint["probe_config"])
+    if cfg.n_concepts != n_concepts or cfg.state_dim != 2 * state_d:
+        raise ValueError(
+            "TAP shape mismatch: "
+            f"probe n_concepts/state_dim={cfg.n_concepts}/{cfg.state_dim}, "
+            f"backbone={n_concepts}/{2 * state_d}"
+        )
+    probe_type = checkpoint["probe_type"]
+    if probe_type == "mlp":
+        probe: nn.Module = TimeAwareProbe(cfg)
+    elif probe_type == "ebbinghaus":
+        probe = EbbinghausTimeAwareProbe(cfg)
+    else:
+        raise ValueError(f"Unsupported TAP probe_type: {probe_type}")
+    probe.load_state_dict(checkpoint["probe_state_dict"])
+    probe.eval()
+    return MobileTAPReadout(probe, n_concepts, state_d, unseen_gap).eval(), checkpoint
 
 
 def choose_validation_sample(data_root: Path, max_concepts: int) -> dict[str, Any]:
@@ -362,10 +455,16 @@ def main() -> int:
     parser.add_argument("--data_root", type=Path, default=DEFAULT_DATA_ROOT)
     parser.add_argument("--out_dir", type=Path, default=DEFAULT_OUT_DIR)
     parser.add_argument("--max_concepts", type=int, default=10)
+    parser.add_argument("--tap_checkpoint", type=Path, default=DEFAULT_TAP_CHECKPOINT)
+    parser.add_argument("--tap_unseen_gap", type=float, default=201.0)
     args = parser.parse_args()
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
-    for stale_name in ["mobile_mikt_predict.onnx.data", "mobile_mikt_update.onnx.data"]:
+    for stale_name in [
+        "mobile_mikt_predict.onnx.data",
+        "mobile_mikt_update.onnx.data",
+        "mobile_tap_readout.onnx.data",
+    ]:
         stale_path = args.out_dir / stale_name
         if stale_path.exists():
             stale_path.unlink()
@@ -373,6 +472,13 @@ def main() -> int:
     backbone = model.backbone
     predict_model = MobileMIKTPredict(backbone).eval()
     update_model = MobileMIKTUpdate(backbone).eval()
+    tap_model, tap_checkpoint = load_tap_readout(
+        args.tap_checkpoint,
+        args.checkpoint,
+        backbone.n_concepts,
+        backbone.state_d,
+        args.tap_unseen_gap,
+    )
 
     batch = 1
     d = backbone.d
@@ -394,9 +500,12 @@ def main() -> int:
     concept_ids = torch.tensor([sample["concept_ids"]], dtype=torch.long)
     response = torch.tensor([sample["response"]], dtype=torch.long)
     step = torch.tensor([float(sample["step"])], dtype=torch.float32)
+    tap_seen_count = torch.zeros(batch, k1, dtype=torch.float32)
+    tap_recent_correct_rate = torch.full((batch, k1), 0.5, dtype=torch.float32)
 
     predict_path = args.out_dir / "mobile_mikt_predict.onnx"
     update_path = args.out_dir / "mobile_mikt_update.onnx"
+    tap_path = args.out_dir / "mobile_tap_readout.onnx"
     export_onnx(
         predict_model,
         (q_embedding, difficulty, concept_ids, initial_skill, initial_all, initial_last, step),
@@ -410,7 +519,7 @@ def main() -> int:
             "last_skill_time",
             "step",
         ],
-        ["pred_correct"],
+        ["pred_correct", "prediction_attention"],
     )
     export_onnx(
         update_model,
@@ -428,9 +537,30 @@ def main() -> int:
         ],
         ["next_skill_state", "next_all_state", "next_last_skill_time"],
     )
+    export_onnx(
+        tap_model,
+        (
+            initial_skill,
+            initial_all,
+            initial_last,
+            step,
+            tap_seen_count,
+            tap_recent_correct_rate,
+        ),
+        tap_path,
+        [
+            "skill_state",
+            "all_state",
+            "last_skill_time",
+            "as_of_step",
+            "tap_seen_count",
+            "tap_recent_correct_rate",
+        ],
+        ["concept_mastery"],
+    )
 
     onnx_check = {"schema_version": "1.0", "models": {}}
-    for name, path in {"predict": predict_path, "update": update_path}.items():
+    for name, path in {"predict": predict_path, "update": update_path, "tap_readout": tap_path}.items():
         onnx_model = onnx.load(path)
         onnx.checker.check_model(onnx_model)
         onnx_check["models"][name] = {
@@ -446,10 +576,40 @@ def main() -> int:
     write_json(args.out_dir / "onnx_check_report.json", onnx_check)
 
     with torch.no_grad():
-        pred = predict_model(q_embedding, difficulty, concept_ids, initial_skill, initial_all, initial_last, step)
+        pred, prediction_attention = predict_model(
+            q_embedding, difficulty, concept_ids, initial_skill, initial_all, initial_last, step
+        )
         next_skill, next_all, next_last = update_model(
             q_embedding, difficulty, concept_ids, response, initial_skill, initial_all, initial_last, step
         )
+        initial_mastery = tap_model(
+            initial_skill,
+            initial_all,
+            initial_last,
+            step,
+            tap_seen_count,
+            tap_recent_correct_rate,
+        )
+
+    updated_concepts = [cid for cid in sample["concept_ids"] if cid > 0]
+    for cid in sorted(set(updated_concepts)):
+        tap_seen_count[:, cid] += 1.0
+        tap_recent_correct_rate[:, cid] = float(sample["response"])
+    with torch.no_grad():
+        updated_mastery = tap_model(
+            next_skill,
+            next_all,
+            next_last,
+            step,
+            tap_seen_count,
+            tap_recent_correct_rate,
+        )
+    expected_tap_mastery_path = args.out_dir / "validation_expected_tap_mastery.npz"
+    np.savez_compressed(
+        expected_tap_mastery_path,
+        initial_concept_mastery=initial_mastery.numpy().astype(np.float32),
+        updated_concept_mastery=updated_mastery.numpy().astype(np.float32),
+    )
 
     initial_state_path = args.out_dir / "mobile_mikt_initial_state.npz"
     np.savez_compressed(
@@ -457,6 +617,12 @@ def main() -> int:
         skill_state=initial_skill.numpy().astype(np.float32),
         all_state=initial_all.numpy().astype(np.float32),
         last_skill_time=initial_last.numpy().astype(np.float32),
+    )
+    tap_initial_stats_path = args.out_dir / "mobile_tap_initial_stats.npz"
+    np.savez_compressed(
+        tap_initial_stats_path,
+        tap_seen_count=np.zeros((batch, k1), dtype=np.float32),
+        tap_recent_correct_rate=np.full((batch, k1), 0.5, dtype=np.float32),
     )
     expected_update_path = args.out_dir / "validation_expected_update_state.npz"
     np.savez_compressed(
@@ -486,12 +652,13 @@ def main() -> int:
         "expected_update_state": "validation_expected_update_state.npz",
         "expected": {
             "pred_correct": float(pred.item()),
+            "prediction_attention_sha256": array_digest(prediction_attention.numpy()),
             "next_skill_state_sha256": array_digest(next_skill.numpy()),
             "next_all_state_sha256": array_digest(next_all.numpy()),
             "next_last_skill_time_sha256": array_digest(next_last.numpy()),
             "next_skill_state_l2_norm": float(next_skill.norm().item()),
             "next_all_state_l2_norm": float(next_all.norm().item()),
-            "updated_concept_ids": [cid for cid in sample["concept_ids"] if cid > 0],
+            "updated_concept_ids": updated_concepts,
         },
         "tolerance": {
             "pred_correct_abs": 1e-5,
@@ -499,6 +666,106 @@ def main() -> int:
         },
     }
     write_json(args.out_dir / "export_validation.json", validation)
+    tap_validation = {
+        "schema_version": "1.0",
+        "purpose": "Golden fixture for app-side TAP ONNX Runtime wiring.",
+        "tap_model": "mobile_tap_readout.onnx",
+        "initial_state": "mobile_mikt_initial_state.npz",
+        "initial_tap_stats": "mobile_tap_initial_stats.npz",
+        "expected_tap_mastery": "validation_expected_tap_mastery.npz",
+        "sample_input": "validation_sample_input.json",
+        "expected": {
+            "initial_concept_mastery_sha256": array_digest(initial_mastery.numpy()),
+            "updated_concept_mastery_sha256": array_digest(updated_mastery.numpy()),
+            "initial_padding_mastery": float(initial_mastery[0, 0].item()),
+            "updated_padding_mastery": float(updated_mastery[0, 0].item()),
+            "updated_concept_ids": updated_concepts,
+            "updated_concept_mastery": {
+                str(cid): float(updated_mastery[0, cid].item()) for cid in sorted(set(updated_concepts))
+            },
+        },
+        "tolerance": {
+            "mastery_element_abs": 1e-5,
+        },
+    }
+    write_json(args.out_dir / "tap_export_validation.json", tap_validation)
+
+    predict_ref = ReferenceEvaluator(onnx.load(predict_path))
+    update_ref = ReferenceEvaluator(onnx.load(update_path))
+    tap_ref = ReferenceEvaluator(onnx.load(tap_path))
+    state_feed = {
+        "skill_state": initial_skill.numpy(),
+        "all_state": initial_all.numpy(),
+        "last_skill_time": initial_last.numpy(),
+    }
+    pred_ref, attention_ref = predict_ref.run(
+        None,
+        {
+            **state_feed,
+            "question_embedding": q_embedding.numpy(),
+            "difficulty": difficulty.numpy(),
+            "concept_ids": concept_ids.numpy(),
+            "step": step.numpy(),
+        },
+    )
+    next_skill_ref, next_all_ref, next_last_ref = update_ref.run(
+        None,
+        {
+            **state_feed,
+            "question_embedding": q_embedding.numpy(),
+            "difficulty": difficulty.numpy(),
+            "concept_ids": concept_ids.numpy(),
+            "response": response.numpy(),
+            "step": step.numpy(),
+        },
+    )
+    initial_mastery_ref, = tap_ref.run(
+        None,
+        {
+            **state_feed,
+            "as_of_step": step.numpy(),
+            "tap_seen_count": np.zeros((batch, k1), dtype=np.float32),
+            "tap_recent_correct_rate": np.full((batch, k1), 0.5, dtype=np.float32),
+        },
+    )
+    updated_mastery_ref, = tap_ref.run(
+        None,
+        {
+            "skill_state": next_skill_ref,
+            "all_state": next_all_ref,
+            "last_skill_time": next_last_ref,
+            "as_of_step": step.numpy(),
+            "tap_seen_count": tap_seen_count.numpy(),
+            "tap_recent_correct_rate": tap_recent_correct_rate.numpy(),
+        },
+    )
+    reference_errors = {
+        "pred_correct_abs": float(abs(float(pred_ref.item()) - float(pred.item()))),
+        "prediction_attention_max_abs": max_abs_error(attention_ref, prediction_attention.numpy()),
+        "next_skill_state_max_abs": max_abs_error(next_skill_ref, next_skill.numpy()),
+        "next_all_state_max_abs": max_abs_error(next_all_ref, next_all.numpy()),
+        "next_last_skill_time_max_abs": max_abs_error(next_last_ref, next_last.numpy()),
+        "initial_concept_mastery_max_abs": max_abs_error(initial_mastery_ref, initial_mastery.numpy()),
+        "updated_concept_mastery_max_abs": max_abs_error(updated_mastery_ref, updated_mastery.numpy()),
+    }
+    reference_tolerance = 1e-5
+    reference_validation = {
+        "schema_version": "1.0",
+        "runtime": "onnx.reference.ReferenceEvaluator",
+        "status": "passed" if max(reference_errors.values()) <= reference_tolerance else "failed",
+        "max_allowed_abs_error": reference_tolerance,
+        "errors": reference_errors,
+        "diagnostics": {
+            "sample_prediction_attention_nonzero_concept_ids": np.flatnonzero(attention_ref[0] > 0).tolist(),
+            "sample_prediction_attention_sum": float(attention_ref.sum()),
+            "sample_updated_mastery": {
+                str(cid): float(updated_mastery_ref[0, cid]) for cid in sorted(set(updated_concepts))
+            },
+        },
+    }
+    write_json(args.out_dir / "onnx_reference_validation.json", reference_validation)
+    if reference_validation["status"] != "passed":
+        raise RuntimeError(f"ONNX reference validation failed: {reference_errors}")
 
     concept2id, concept_catalog = build_concept_catalog(args.data_root)
     write_json(args.out_dir / "concept_id_map.json", concept2id)
@@ -509,6 +776,7 @@ def main() -> int:
         "stateful_mobile_engine": True,
         "state_files": {
             "initial_state": "mobile_mikt_initial_state.npz",
+            "initial_tap_stats": "mobile_tap_initial_stats.npz",
         },
         "state_tensors": {
             "skill_state": {"dtype": "float32", "shape": ["batch", k1, state_d]},
@@ -519,6 +787,19 @@ def main() -> int:
             "skill_state": "Per-concept latent knowledge vector. This is not directly user-facing mastery.",
             "all_state": "Global student latent state used by MIKT prediction/update.",
             "last_skill_time": "Per-concept last update step for elapsed-step forgetting.",
+        },
+        "tap_profile_stats": {
+            "tap_seen_count": {
+                "dtype": "float32",
+                "shape": ["batch", k1],
+                "semantics": "Per-concept number of completed learner responses. Used to distinguish unseen concepts and compute log1p(seen_count).",
+            },
+            "tap_recent_correct_rate": {
+                "dtype": "float32",
+                "shape": ["batch", k1],
+                "initial_value": 0.5,
+                "semantics": "Per-concept correctness mean over the most recent responses. The app maintains a small response ring buffer and passes the derived rate to TAP.",
+            },
         },
         "client_storage": {
             "one_state_per_user_profile": True,
@@ -546,6 +827,12 @@ def main() -> int:
                 },
                 "outputs": {
                     "pred_correct": {"dtype": "float32", "shape": ["batch"], "range": [0.0, 1.0]},
+                    "prediction_attention": {
+                        "dtype": "float32",
+                        "shape": ["batch", k1],
+                        "range": [0.0, 1.0],
+                        "semantics": "MIKT prediction-time attention over concept state columns. Unrelated concepts and padding column 0 are zero.",
+                    },
                 },
             },
             "update": {
@@ -567,16 +854,87 @@ def main() -> int:
                     "next_last_skill_time": {"dtype": "float32", "shape": ["batch", k1]},
                 },
             },
+            "tap_readout": {
+                "file": "mobile_tap_readout.onnx",
+                "onnx_opset": 18,
+                "inputs": {
+                    "skill_state": {"dtype": "float32", "shape": ["batch", k1, state_d]},
+                    "all_state": {"dtype": "float32", "shape": ["batch", state_d]},
+                    "last_skill_time": {"dtype": "float32", "shape": ["batch", k1]},
+                    "as_of_step": {"dtype": "float32", "shape": ["batch"]},
+                    "tap_seen_count": {"dtype": "float32", "shape": ["batch", k1]},
+                    "tap_recent_correct_rate": {"dtype": "float32", "shape": ["batch", k1]},
+                },
+                "outputs": {
+                    "concept_mastery": {
+                        "dtype": "float32",
+                        "shape": ["batch", k1],
+                        "range": [0.0, 1.0],
+                        "semantics": "Operational mastery readout. Column 0 is padding and is forced to zero.",
+                    },
+                },
+            },
         },
         "call_order": [
             "Load or initialize local user state.",
             "Call QE server or local cache to get question_embedding, difficulty, and concept_ids.",
             "Run mobile_mikt_predict.onnx before the learner answers.",
             "After the answer is known, run mobile_mikt_update.onnx and persist returned state tensors.",
+            "Update local TAP profile statistics for every related concept.",
+            "Run mobile_tap_readout.onnx when the app needs concept mastery values.",
             "Increment the app-side step counter by one.",
         ],
     }
     write_json(args.out_dir / "mikt_predict_contract.json", predict_contract)
+
+    tap_contract = {
+        "schema_version": "1.0",
+        "model": "MobileKT v4 post-hoc TAP mastery readout",
+        "file": "mobile_tap_readout.onnx",
+        "initial_stats": "mobile_tap_initial_stats.npz",
+        "inputs": predict_contract["onnx_models"]["tap_readout"]["inputs"],
+        "outputs": predict_contract["onnx_models"]["tap_readout"]["outputs"],
+        "timer_features": [
+            "log1p(gap_since_last_seen)",
+            "log1p(tap_seen_count)",
+            "tap_recent_correct_rate",
+        ],
+        "timer_semantics": {
+            "gap_since_last_seen": "For seen concepts, max(as_of_step - last_skill_time, 0). For unseen concepts, tap_unseen_gap is used.",
+            "tap_unseen_gap": args.tap_unseen_gap,
+            "clock": "Interaction-step index, not wall-clock elapsed time.",
+        },
+        "app_profile_storage": {
+            "required": [
+                "tap_seen_count",
+                "a per-concept response ring buffer for deriving tap_recent_correct_rate",
+            ],
+            "recommended_recent_window": 5,
+            "update_rule": "After each completed response, update TAP profile stats once for every unique positive concept_id related to the answered question.",
+        },
+        "readout_timing": {
+            "initial_profile": "Use as_of_step=0 with zero tap_seen_count.",
+            "immediately_after_answer": "Run MIKT update with step=t, update TAP stats, then run TAP readout with as_of_step=t. Persist next interaction step as t+1.",
+        },
+        "mastery_semantics": "Calibrated operational mastery proxy trained against future same-concept correctness. It is not a directly observed psychological ground-truth label.",
+    }
+    write_json(args.out_dir / "tap_readout_contract.json", tap_contract)
+
+    tap_compatibility = {
+        "schema_version": "1.0",
+        "mikt_compatibility_version": "mobilekt4-stat-20260528-qe-e2e-teacher-seed2024-dp0.1",
+        "tap_checkpoint": str(args.tap_checkpoint),
+        "tap_checkpoint_sha256": sha256_file(args.tap_checkpoint),
+        "required_backbone_checkpoint_sha256": tap_checkpoint["base_checkpoint_sha256"],
+        "probe_type": tap_checkpoint["probe_type"],
+        "probe_config": tap_checkpoint["probe_config"],
+        "valid_metrics": tap_checkpoint.get("valid_metrics", {}),
+        "notes": [
+            "Do not attach this TAP readout to a different MobileKT backbone latent space.",
+            "The exported TAP clock is interaction-step based. Wall-clock forgetting requires retraining with timestamp features.",
+        ],
+    }
+    write_json(args.out_dir / "tap_backbone_compatibility.json", tap_compatibility)
 
     kc_mapping_contract = {
         "schema_version": "1.0",
@@ -671,7 +1029,7 @@ def main() -> int:
         "notes": [
             "This is not yet an unseen-question split result.",
             "pred_correct is calibrated only to the current student-level split.",
-            "App-facing mastery should come from TAP/readout in a later export, not directly from skill_state vector values.",
+            "App-facing mastery comes from mobile_tap_readout.onnx, not directly from skill_state vector values.",
         ],
     }
     write_json(args.out_dir / "evaluation_report.json", evaluation)
@@ -691,6 +1049,9 @@ def main() -> int:
     )
     if args.metrics.exists():
         shutil.copy2(args.metrics, args.out_dir / "source_metrics.json")
+    tap_training_report = args.tap_checkpoint.parent / "tap_training_report.json"
+    if tap_training_report.exists():
+        shutil.copy2(tap_training_report, args.out_dir / "tap_training_report.json")
 
     manifest_files = sorted(
         p for p in args.out_dir.iterdir() if p.is_file() and p.name != "mobile_export_manifest.json"

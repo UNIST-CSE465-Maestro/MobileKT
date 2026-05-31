@@ -1,0 +1,191 @@
+{
+  "schema_version": "1.0",
+  "model": "MobileKT v4 TAP",
+  "base_checkpoint": "/workspace/maestro/MobileKT/experiments/statics2011_qe_e2e_teacher_guided_best_20260528/qe_seed2024_lr1e-03_dp0p1/statics2011_qe_trainable_id_seed2024_lr1e-03_dp0p1_seed2024_lr1e-03_dp0.1_q1_d1_logit1_kt1/qe_distill_best.pt",
+  "base_checkpoint_sha256": "7f61b4bc603e34dc1d98ebedb60038b6b460bc4ff5e06660107ce7f3421f94b2",
+  "tap_checkpoint": "experiments/statics2011_mobilekt4_tap_export/mobilekt_v4_tap_best.pt",
+  "probe_type": "mlp",
+  "probe_config": {
+    "state_dim": 128,
+    "n_concepts": 640,
+    "timer_dim": 3,
+    "concept_dim": 32,
+    "hidden_dim": 128,
+    "n_layers": 2,
+    "dropout": 0.1,
+    "use_concept_embedding": true,
+    "horizon": 50,
+    "tau": 20.0,
+    "label_mode": "decayed_average",
+    "direction_margin": 0.02,
+    "lambda_direction": 0.1,
+    "lambda_smooth": 0.0,
+    "lambda_forgetting": 0.0,
+    "forgetting_margin": 0.0,
+    "forgetting_short_gap": 3.0,
+    "forgetting_long_gap": 50.0,
+    "max_decay_rate": 2.0
+  },
+  "best_valid": {
+    "loss": 0.4807623949092049,
+    "samples": 35694.0,
+    "auc": 0.7705675959587097,
+    "brier": 0.09523728489875793,
+    "ece": 0.01610126532614231
+  },
+  "test": {
+    "loss": 0.44484324767154154,
+    "samples": 37388.0,
+    "auc": 0.7787488698959351,
+    "brier": 0.08324424177408218,
+    "ece": 0.013486967422068119
+  },
+  "history": [
+    {
+      "epoch": 1,
+      "train": {
+        "loss": 0.5250434286692474,
+        "samples": 274897.0
+      },
+      "valid": {
+        "loss": 0.503084903495575,
+        "samples": 35694.0,
+        "auc": 0.7394372224807739,
+        "brier": 0.10354394465684891,
+        "ece": 0.027280718088150024
+      }
+    },
+    {
+      "epoch": 2,
+      "train": {
+        "loss": 0.49448617276598655,
+        "samples": 275987.0
+      },
+      "valid": {
+        "loss": 0.49177215893462156,
+        "samples": 35694.0,
+        "auc": 0.7563095688819885,
+        "brier": 0.09923841059207916,
+        "ece": 0.015589764341711998
+      }
+    },
+    {
+      "epoch": 3,
+      "train": {
+        "loss": 0.48097365355321764,
+        "samples": 275090.0
+      },
+      "valid": {
+        "loss": 0.4875189786118446,
+        "samples": 35694.0,
+        "auc": 0.7625871300697327,
+        "brier": 0.09741135686635971,
+        "ece": 0.01625448279082775
+      }
+    },
+    {
+      "epoch": 4,
+      "train": {
+        "loss": 0.47566503335891436,
+        "samples": 273054.0
+      },
+      "valid": {
+        "loss": 0.4870628070088537,
+        "samples": 35694.0,
+        "auc": 0.765057384967804,
+        "brier": 0.09786136448383331,
+        "ece": 0.02722270041704178
+      }
+    },
+    {
+      "epoch": 5,
+      "train": {
+        "loss": 0.47406081901110875,
+        "samples": 273637.0
+      },
+      "valid": {
+        "loss": 0.4837094127093202,
+        "samples": 35694.0,
+        "auc": 0.7625651359558105,
+        "brier": 0.09722413867712021,
+        "ece": 0.015899119898676872
+      }
+    },
+    {
+      "epoch": 6,
+      "train": {
+        "loss": 0.47247912154859123,
+        "samples": 272753.0
+      },
+      "valid": {
+        "loss": 0.48328883842826925,
+        "samples": 35694.0,
+        "auc": 0.7671096324920654,
+        "brier": 0.09625647962093353,
+        "ece": 0.025601796805858612
+      }
+    },
+    {
+      "epoch": 7,
+      "train": {
+        "loss": 0.471677493852049,
+        "samples": 274512.0
+      },
+      "valid": {
+        "loss": 0.48094704362626983,
+        "samples": 35694.0,
+        "auc": 0.772757887840271,
+        "brier": 0.09587185084819794,
+        "ece": 0.015132637694478035
+      }
+    },
+    {
+      "epoch": 8,
+      "train": {
+        "loss": 0.4705524734156996,
+        "samples": 274019.0
+      },
+      "valid": {
+        "loss": 0.48781241193073915,
+        "samples": 35694.0,
+        "auc": 0.7674199342727661,
+        "brier": 0.09802891314029694,
+        "ece": 0.029390748590230942
+      }
+    },
+    {
+      "epoch": 9,
+      "train": {
+        "loss": 0.4697467470952239,
+        "samples": 274106.0
+      },
+      "valid": {
+        "loss": 0.4808143583868053,
+        "samples": 35694.0,
+        "auc": 0.771929919719696,
+        "brier": 0.0955362319946289,
+        "ece": 0.029620932415127754
+      }
+    },
+    {
+      "epoch": 10,
+      "train": {
+        "loss": 0.46672274363133054,
+        "samples": 274836.0
+      },
+      "valid": {
+        "loss": 0.4807623949092049,
+        "samples": 35694.0,
+        "auc": 0.7705675959587097,
+        "brier": 0.09523728489875793,
+        "ece": 0.01610126532614231
+      }
+    }
+  ],
+  "elapsed_seconds": 567.02783036232,
+  "notes": [
+    "The MobileKT v4 backbone is frozen. Only the TAP readout is trained.",
+    "TAP targets are future same-concept correctness proxies, not ground-truth psychological mastery labels.",
+    "The export-compatible timer uses interaction-step gaps, not wall-clock elapsed time."
+  ]
+}

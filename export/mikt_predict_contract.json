@@ -66,6 +66,18 @@
             0.0,
             1.0
           ]
+        },
+        "prediction_attention": {
+          "dtype": "float32",
+          "shape": [
+            "batch",
+            641
+          ],
+          "range": [
+            0.0,
+            1.0
+          ],
+          "semantics": "MIKT prediction-time attention over concept state columns. Unrelated concepts and padding column 0 are zero."
         }
       }
     },
@@ -157,6 +169,68 @@
           ]
         }
       }
+    },
+    "tap_readout": {
+      "file": "mobile_tap_readout.onnx",
+      "onnx_opset": 18,
+      "inputs": {
+        "skill_state": {
+          "dtype": "float32",
+          "shape": [
+            "batch",
+            641,
+            64
+          ]
+        },
+        "all_state": {
+          "dtype": "float32",
+          "shape": [
+            "batch",
+            64
+          ]
+        },
+        "last_skill_time": {
+          "dtype": "float32",
+          "shape": [
+            "batch",
+            641
+          ]
+        },
+        "as_of_step": {
+          "dtype": "float32",
+          "shape": [
+            "batch"
+          ]
+        },
+        "tap_seen_count": {
+          "dtype": "float32",
+          "shape": [
+            "batch",
+            641
+          ]
+        },
+        "tap_recent_correct_rate": {
+          "dtype": "float32",
+          "shape": [
+            "batch",
+            641
+          ]
+        }
+      },
+      "outputs": {
+        "concept_mastery": {
+          "dtype": "float32",
+          "shape": [
+            "batch",
+            641
+          ],
+          "range": [
+            0.0,
+            1.0
+          ],
+          "semantics": "Operational mastery readout. Column 0 is padding and is forced to zero."
+        }
+      }
     }
   },
   "call_order": [
@@ -164,6 +238,8 @@
     "Call QE server or local cache to get question_embedding, difficulty, and concept_ids.",
     "Run mobile_mikt_predict.onnx before the learner answers.",
     "After the answer is known, run mobile_mikt_update.onnx and persist returned state tensors.",
+    "Update local TAP profile statistics for every related concept.",
+    "Run mobile_tap_readout.onnx when the app needs concept mastery values.",
     "Increment the app-side step counter by one."
   ]
 }

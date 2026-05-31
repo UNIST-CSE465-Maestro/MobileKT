@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.0",
+  "runtime": "onnx.reference.ReferenceEvaluator",
+  "status": "passed",
+  "max_allowed_abs_error": 1e-05,
+  "errors": {
+    "pred_correct_abs": 0.0,
+    "prediction_attention_max_abs": 0.0,
+    "next_skill_state_max_abs": 1.7881393432617188e-07,
+    "next_all_state_max_abs": 1.1175870895385742e-07,
+    "next_last_skill_time_max_abs": 0.0,
+    "initial_concept_mastery_max_abs": 1.1920928955078125e-07,
+    "updated_concept_mastery_max_abs": 1.1920928955078125e-07
+  },
+  "diagnostics": {
+    "sample_prediction_attention_nonzero_concept_ids": [
+      593
+    ],
+    "sample_prediction_attention_sum": 1.0,
+    "sample_updated_mastery": {
+      "593": 0.8047365546226501
+    }
+  }
+}

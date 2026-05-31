@@ -2,7 +2,8 @@
   "schema_version": "1.0",
   "stateful_mobile_engine": true,
   "state_files": {
-    "initial_state": "mobile_mikt_initial_state.npz"
+    "initial_state": "mobile_mikt_initial_state.npz",
+    "initial_tap_stats": "mobile_tap_initial_stats.npz"
   },
   "state_tensors": {
     "skill_state": {
@@ -32,6 +33,25 @@
     "skill_state": "Per-concept latent knowledge vector. This is not directly user-facing mastery.",
     "all_state": "Global student latent state used by MIKT prediction/update.",
     "last_skill_time": "Per-concept last update step for elapsed-step forgetting."
+  },
+  "tap_profile_stats": {
+    "tap_seen_count": {
+      "dtype": "float32",
+      "shape": [
+        "batch",
+        641
+      ],
+      "semantics": "Per-concept number of completed learner responses. Used to distinguish unseen concepts and compute log1p(seen_count)."
+    },
+    "tap_recent_correct_rate": {
+      "dtype": "float32",
+      "shape": [
+        "batch",
+        641
+      ],
+      "initial_value": 0.5,
+      "semantics": "Per-concept correctness mean over the most recent responses. The app maintains a small response ring buffer and passes the derived rate to TAP."
+    }
   },
   "client_storage": {
     "one_state_per_user_profile": true,

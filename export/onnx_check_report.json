@@ -20,7 +20,8 @@
         "step"
       ],
       "outputs": [
-        "pred_correct"
+        "pred_correct",
+        "prediction_attention"
       ]
     },
     "update": {
@@ -46,6 +47,27 @@
         "next_skill_state",
         "next_all_state",
         "next_last_skill_time"
+      ]
+    },
+    "tap_readout": {
+      "file": "mobile_tap_readout.onnx",
+      "checker": "passed",
+      "opsets": [
+        {
+          "domain": "",
+          "version": 18
+        }
+      ],
+      "inputs": [
+        "skill_state",
+        "all_state",
+        "last_skill_time",
+        "as_of_step",
+        "tap_seen_count",
+        "tap_recent_correct_rate"
+      ],
+      "outputs": [
+        "concept_mastery"
       ]
     }
   }

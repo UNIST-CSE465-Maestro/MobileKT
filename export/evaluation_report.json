@@ -28,6 +28,6 @@
   "notes": [
     "This is not yet an unseen-question split result.",
     "pred_correct is calibrated only to the current student-level split.",
-    "App-facing mastery should come from TAP/readout in a later export, not directly from skill_state vector values."
+    "App-facing mastery comes from mobile_tap_readout.onnx, not directly from skill_state vector values."
   ]
 }

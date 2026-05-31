@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.0",
+  "purpose": "Golden fixture for app-side TAP ONNX Runtime wiring.",
+  "tap_model": "mobile_tap_readout.onnx",
+  "initial_state": "mobile_mikt_initial_state.npz",
+  "initial_tap_stats": "mobile_tap_initial_stats.npz",
+  "expected_tap_mastery": "validation_expected_tap_mastery.npz",
+  "sample_input": "validation_sample_input.json",
+  "expected": {
+    "initial_concept_mastery_sha256": "ff5acac741d3b1ac4486e702732fd9ee0350c47cf28651fa9f6c5f8707af4a91",
+    "updated_concept_mastery_sha256": "c95ad5907514c563d2b47c42327fc08203748a07f9efb03a23e9b2a6e9b0f8b3",
+    "initial_padding_mastery": 0.0,
+    "updated_padding_mastery": 0.0,
+    "updated_concept_ids": [
+      593
+    ],
+    "updated_concept_mastery": {
+      "593": 0.8047364950180054
+    }
+  },
+  "tolerance": {
+    "mastery_element_abs": 1e-05
+  }
+}

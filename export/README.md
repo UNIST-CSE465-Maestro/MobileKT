@@ -1,10 +1,11 @@
 # MobileKT Mobile Export Guide
 
-Export date: 2026-05-29  
-Model: MobileKT v4 `QE-E2E+Teacher`  
-Mode: stateful mobile KT-Engine
+Export date: 2026-05-31
+Model: MobileKT v4 `QE-E2E+Teacher`
+Mode: stateful mobile KT-Engine + on-device TAP mastery readout
 
-This folder contains the mobile-side MIKT KT-Engine artifacts and the contracts needed to connect it with the server-side Question Encoder.
+This folder contains the mobile-side MIKT KT-Engine, the TAP mastery readout,
+and the contracts needed to connect them with the server-side Question Encoder.
 
 ## Runtime Split
 
@@ -18,15 +19,21 @@ Server
 Mobile
   question_embedding + difficulty + concept_ids + local student state
     -> mobile_mikt_predict.onnx
-    -> pred_correct
+    -> pred_correct, prediction_attention
 
   after learner response
   question_embedding + difficulty + concept_ids + response + local student state
     -> mobile_mikt_update.onnx
     -> next local student state
+
+  local student state + local TAP profile statistics
+    -> mobile_tap_readout.onnx
+    -> concept_mastery[641]
 ```
 
-The mobile app should not run Harrier. The app owns and persists the MIKT state.
+The mobile app should not run Harrier. The app owns and persists the MIKT state
+and the small TAP profile statistics. TAP runs fully on-device and does not
+send learner state to the QE server.
 
 Important distinction:
 
@@ -40,6 +47,10 @@ qe_server_question_encoder.pt:
 
 mobile_mikt_*.onnx:
   trained stateful mobile KT engine
+
+mobile_tap_readout.onnx:
+  post-hoc operational mastery readout trained against
+  future same-concept correctness
 ```
 
 For existing Statics2011 benchmark questions, `question_harrier_features.pt`
@@ -53,9 +64,13 @@ server-side representation cache.
 |---|---|
 | `mobile_mikt_predict.onnx` | Predicts `pred_correct` from current question representation and local student state. |
 | `mobile_mikt_update.onnx` | Updates local MIKT state after the learner response is known. |
+| `mobile_tap_readout.onnx` | Reads calibrated concept-level operational mastery values from local MIKT state and TAP profile statistics. |
 | `mobile_mikt_initial_state.npz` | Initial state for a new learner profile. |
+| `mobile_tap_initial_stats.npz` | Initial TAP profile statistics for a new learner profile. |
 | `mikt_predict_contract.json` | ONNX input/output names, dtypes, shapes, padding, and call order. |
 | `mikt_state_contract.json` | Meaning and storage contract for `skill_state`, `all_state`, and `last_skill_time`. |
+| `tap_readout_contract.json` | TAP ONNX inputs, timer semantics, app-side profile storage, and call timing. |
+| `tap_backbone_compatibility.json` | Compatibility metadata binding TAP weights to this exact MobileKT backbone latent space. |
 | `concept_id_map.json` | Canonical concept key to integer id map. |
 | `concept_catalog.json` | Human-readable concept catalog with source metadata. |
 | `kc_mapping_contract.json` | Concept padding and mapping rules. |
@@ -64,8 +79,12 @@ server-side representation cache.
 | `export_validation.json` | Golden validation values for app-side wiring checks. |
 | `validation_sample_input.json` | Sample question representation for validation. |
 | `validation_expected_update_state.npz` | Expected state after the sample update. |
+| `validation_expected_tap_mastery.npz` | Expected initial and post-update TAP mastery arrays. |
+| `tap_export_validation.json` | Golden TAP validation values for app-side wiring checks. |
 | `onnx_check_report.json` | ONNX checker result and model IO names. |
+| `onnx_reference_validation.json` | Actual ONNX reference-runtime output comparison against PyTorch golden values. |
 | `evaluation_report.json` | Model performance and calibration context. |
+| `tap_training_report.json` | MobileKT-v4 TAP training history and mastery-readout metrics. |
 | `mobile_export_manifest.json` | File sizes and SHA-256 checksums. |
 | `qe_server_question_encoder.pt` | Server-side QE head weights matching this mobile backbone. |
 | `qe_server_config.json` | Minimal config for loading the QE head on the server. |
@@ -79,23 +98,39 @@ skill_state:      float32 [1, 641, 64]
 all_state:        float32 [1, 64]
 last_skill_time:  float32 [1, 641]
 step:             float32 scalar or [1]
+
+tap_seen_count:          float32 [1, 641]
+tap_recent_correct_rate: float32 [1, 641]
 ```
 
-`skill_state[c]` is the concept-level latent knowledge vector. It is not directly a user-facing mastery percentage. A TAP/readout export should be used later for calibrated mastery display.
+`skill_state[c]` is the concept-level latent knowledge vector. It is not
+directly a user-facing mastery percentage. Use `mobile_tap_readout.onnx` to
+produce `concept_mastery[c]`.
+
+The app should also persist a small response ring buffer for each concept,
+recommended length `5`, so it can update `tap_recent_correct_rate`. Initialize
+the direct TAP arrays from `mobile_tap_initial_stats.npz`:
+
+```text
+tap_seen_count:          all zeros
+tap_recent_correct_rate: all 0.5
+```
 
 Column `0` in state tensors is reserved for padding. Do not display it as a real concept.
 
 ## Mobile Call Order
 
-1. For a new learner, load `mobile_mikt_initial_state.npz`.
+1. For a new learner, load `mobile_mikt_initial_state.npz` and `mobile_tap_initial_stats.npz`.
 2. Request or fetch cached QE output from the server:
    `question_embedding`, `difficulty`, `concept_ids`.
 3. Pad `concept_ids` to length `10` with `-1`.
 4. Run `mobile_mikt_predict.onnx`.
-5. Show or consume `pred_correct`.
+5. Show or consume `pred_correct`. Store `prediction_attention` if the UI needs per-question concept diagnostics.
 6. After the learner answers, run `mobile_mikt_update.onnx`.
-7. Persist `next_skill_state`, `next_all_state`, `next_last_skill_time`.
-8. Increment the local `step`.
+7. For every unique positive concept id in the answered question, increment `tap_seen_count` and update its recent-response ring buffer and `tap_recent_correct_rate`.
+8. Run `mobile_tap_readout.onnx` with `as_of_step=step` when the UI needs updated concept mastery.
+9. Persist the next MIKT state, TAP profile statistics, response ring buffers, and answer event atomically.
+10. Increment the local `step`.
 
 The app should cache QE output by:
 
@@ -120,6 +155,11 @@ skill_state:        float32 [batch, 641, 64]
 all_state:          float32 [batch, 64]
 last_skill_time:    float32 [batch, 641]
 step:               float32 [batch]
+
+TAP-only inputs:
+as_of_step:                 float32 [batch]
+tap_seen_count:             float32 [batch, 641]
+tap_recent_correct_rate:    float32 [batch, 641]
 ```
 
 The exported ONNX models use opset 18 and passed `onnx.checker`.
@@ -430,8 +470,17 @@ step:               float32 [1]
 Output:
 
 ```text
-pred_correct: float32 [1]
+pred_correct:          float32 [1]
+prediction_attention:  float32 [1, 641]
 ```
+
+`prediction_attention[0, c]` is the MIKT prediction-time attention assigned to
+concept-state column `c` for the current question. Unrelated concepts and
+padding column `0` are zero. The nonzero values sum to `1`.
+
+This attention is exported as a diagnostic signal for Phase 2. It is not used
+to train or replace TAP mastery, and it should not be presented as a causal
+proof that one concept alone determined the learner response.
 
 ### Update After Answer
 
@@ -462,6 +511,62 @@ Then persist:
 skill_state = next_skill_state
 all_state = next_all_state
 last_skill_time = next_last_skill_time
+```
+
+Before incrementing `step`, update TAP profile statistics once for every unique
+positive concept id in the answered question:
+
+```text
+for c in unique(concept_ids where c > 0):
+    tap_seen_count[c] += 1
+    recent_response_ring[c].push(response)  # keep the most recent 5
+    tap_recent_correct_rate[c] = mean(recent_response_ring[c])
+```
+
+### Read Concept Mastery
+
+Run `mobile_tap_readout.onnx` after the MIKT state update and TAP-stat update:
+
+```text
+skill_state:              float32 [1, 641, 64]
+all_state:                float32 [1, 64]
+last_skill_time:          float32 [1, 641]
+as_of_step:               float32 [1]
+tap_seen_count:           float32 [1, 641]
+tap_recent_correct_rate:  float32 [1, 641]
+```
+
+Output:
+
+```text
+concept_mastery: float32 [1, 641]
+```
+
+`concept_mastery[0, 0]` is forced to `0` because state column `0` is padding.
+Display only columns `1..640`, mapped through `concept_catalog.json`.
+
+The mastery score is an operational mastery proxy:
+
+```text
+concept_mastery[c]
+  ~= calibrated probability of future same-concept correctness
+     decoded from the frozen MobileKT-v4 latent state
+```
+
+It is not a directly observed psychological ground-truth label.
+
+### Persist Atomically
+
+After the TAP readout, persist:
+
+```text
+skill_state = next_skill_state
+all_state = next_all_state
+last_skill_time = next_last_skill_time
+tap_seen_count
+tap_recent_correct_rate
+recent_response_ring
+answer_event
 step = step + 1
 ```
 
@@ -469,9 +574,81 @@ State writes should be atomic with the local answer event. If the app crashes
 after the learner answers but before state persistence, the event/state pair
 can diverge.
 
+### Step Timing
+
+The current export uses interaction-step gaps, not wall-clock time:
+
+```text
+gap_since_last_seen[c] =
+  as_of_step - last_skill_time[c]      if tap_seen_count[c] > 0
+  201                                  if the concept is unseen
+```
+
+For an answer processed at local `step=t`:
+
+```text
+1. run MIKT update with step=t
+2. update TAP profile statistics
+3. run TAP readout with as_of_step=t
+4. persist next step as t+1
+```
+
+If product requirements include forgetting across real days without app
+interactions, retrain TAP with timestamp-based features before using wall-clock
+time in the client.
+
+### End-to-End Pseudocode
+
+```text
+profile = load_or_initialize_profile()
+qe = fetch_or_load_cached_question_representation(question)
+concept_ids = pad_to_10(qe.concept_ids, value=-1)
+
+pred_correct, prediction_attention = run(
+    "mobile_mikt_predict.onnx",
+    qe.question_embedding,
+    qe.difficulty,
+    concept_ids,
+    profile.skill_state,
+    profile.all_state,
+    profile.last_skill_time,
+    profile.step,
+)
+
+response = collect_learner_answer()
+
+next_skill_state, next_all_state, next_last_skill_time = run(
+    "mobile_mikt_update.onnx",
+    qe.question_embedding,
+    qe.difficulty,
+    concept_ids,
+    response,
+    profile.skill_state,
+    profile.all_state,
+    profile.last_skill_time,
+    profile.step,
+)
+
+update_tap_stats_once_per_unique_concept(profile, concept_ids, response)
+
+concept_mastery = run(
+    "mobile_tap_readout.onnx",
+    next_skill_state,
+    next_all_state,
+    next_last_skill_time,
+    as_of_step=profile.step,
+    profile.tap_seen_count,
+    profile.tap_recent_correct_rate,
+)
+
+persist_atomically(profile, answer_event, next_state, concept_mastery)
+profile.step += 1
+```
+
 ## Validation Fixture
 
-Use `validation_sample_input.json` with `mobile_mikt_initial_state.npz`.
+Use `validation_sample_input.json` with `mobile_mikt_initial_state.npz` and
+`mobile_tap_initial_stats.npz`.
 
 Expected:
 
@@ -480,6 +657,60 @@ pred_correct = 0.8227500915527344
 ```
 
 After update, compare the outputs against `validation_expected_update_state.npz` or use the SHA-256 digests in `export_validation.json`.
+
+For TAP validation:
+
+```text
+1. Run mobile_tap_readout.onnx on the initial state and initial TAP stats.
+2. Run mobile_mikt_update.onnx with the sample response.
+3. Update TAP stats for the sample concept ids.
+4. Run mobile_tap_readout.onnx again with the updated state.
+5. Compare both mastery arrays against validation_expected_tap_mastery.npz.
+```
+
+Use the tolerance in `tap_export_validation.json`. Small floating-point
+differences across ONNX runtimes are expected, so compare numeric arrays rather
+than requiring identical SHA-256 digests.
+
+## Regenerate And Deliver Artifacts
+
+Train TAP against the exact frozen MobileKT-v4 checkpoint:
+
+```bash
+docker exec maestro_docker bash -lc '
+cd /workspace/maestro/MobileKT
+python3 tools/train_mobilekt_v4_tap.py \
+  --epochs 10 \
+  --batch_size 8 \
+  --max_samples_per_batch 8192 \
+  --out_dir experiments/statics2011_mobilekt4_tap_export
+'
+```
+
+Then regenerate the mobile export:
+
+```bash
+docker exec maestro_docker bash -lc '
+cd /workspace/maestro/MobileKT
+python3 tools/export_mobile_mikt.py
+'
+```
+
+The exporter verifies that the TAP checkpoint was trained against the exact
+backbone checkpoint SHA-256, checks all three ONNX graphs, runs them with
+`onnx.reference.ReferenceEvaluator`, and writes `onnx_reference_validation.json`.
+
+The repository ignores `*.onnx` files and `experiments/` by source-control
+policy. When delivering artifacts to the mobile app project, package every file
+listed in `mobile_export_manifest.json`, including:
+
+```text
+mobile_mikt_predict.onnx
+mobile_mikt_update.onnx
+mobile_tap_readout.onnx
+mobile_mikt_initial_state.npz
+mobile_tap_initial_stats.npz
+```
 
 ## Source Model
 
@@ -493,5 +724,18 @@ maestro/MobileKT/experiments/statics2011_qe_e2e_teacher_guided_best_20260528/
 ```
 
 Test metrics are copied into `evaluation_report.json` and `source_metrics.json`.
+
+The exported TAP readout was trained separately on the exact frozen MobileKT-v4
+backbone. Its report is copied into `tap_training_report.json`. Current TAP test
+metrics:
+
+```text
+future same-KC AUC:  0.7787488699
+Brier:               0.0832442418
+ECE:                 0.0134869674
+```
+
+Do not attach `mobile_tap_readout.onnx` to a different backbone checkpoint.
+The latent space binding is recorded in `tap_backbone_compatibility.json`.
 
 Important caveat: this model was evaluated on the current student-level Statics2011 split. It is not yet an unseen-question split result.
