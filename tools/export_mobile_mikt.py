@@ -35,7 +35,12 @@ if str(ROOT) not in sys.path:
 from config import MobileKTConfig
 from datasets.kt_dataset import _parse_csv
 from models import MobileKTV4
-from models.tap import EbbinghausTimeAwareProbe, TimeAwareProbe, TimeAwareProbeConfig
+from models.tap import (
+    EbbinghausTimeAwareProbe,
+    SharedMIKTTimeAwareProbe,
+    TimeAwareProbe,
+    TimeAwareProbeConfig,
+)
 
 
 DEFAULT_RUN_DIR = (
@@ -49,7 +54,12 @@ DEFAULT_CHECKPOINT = DEFAULT_RUN_DIR / "qe_distill_best.pt"
 DEFAULT_METRICS = DEFAULT_RUN_DIR / "metrics.json"
 DEFAULT_DATA_ROOT = ROOT.parents[1] / "data" / "datasets" / "KT" / "statics2011"
 DEFAULT_OUT_DIR = ROOT / "export"
-DEFAULT_TAP_CHECKPOINT = ROOT / "experiments" / "statics2011_mobilekt4_tap_export" / "mobilekt_v4_tap_best.pt"
+DEFAULT_TAP_CHECKPOINT = (
+    ROOT
+    / "experiments"
+    / "statics2011_mobilekt4_tap_v2_shared_mikt"
+    / "mobilekt_v4_tap_best.pt"
+)
 
 
 class MobileMIKTStepBase(nn.Module):
@@ -371,6 +381,12 @@ def load_tap_readout(
     probe_type = checkpoint["probe_type"]
     if probe_type == "mlp":
         probe: nn.Module = TimeAwareProbe(cfg)
+    elif probe_type == "shared_mikt_mlp":
+        probe = SharedMIKTTimeAwareProbe(
+            cfg,
+            checkpoint["probe_state_dict"]["skill_embed"],
+            checkpoint["probe_state_dict"]["time_state"],
+        )
     elif probe_type == "ebbinghaus":
         probe = EbbinghausTimeAwareProbe(cfg)
     else:
@@ -887,11 +903,36 @@ def main() -> int:
     }
     write_json(args.out_dir / "mikt_predict_contract.json", predict_contract)
 
+    if tap_checkpoint["probe_type"] == "shared_mikt_mlp":
+        tap_architecture = {
+            "version": "tap-v2-shared-mikt",
+            "dynamic_state": "concat(all_state, skill_state[concept_id])",
+            "frozen_mikt_representations": [
+                "skill_embed[concept_id]",
+                "time_state[clamp(gap_since_last_seen, 0, max_time_gap)]",
+            ],
+            "learned_tap_components": [
+                "history_encoder(log1p(tap_seen_count), tap_recent_correct_rate)",
+                "readout_mlp",
+            ],
+            "readout_input_dim": (
+                tap_checkpoint["probe_config"]["state_dim"]
+                + tap_checkpoint["probe_config"]["shared_dim"] * 2
+                + tap_checkpoint["probe_config"]["history_dim"]
+            ),
+        }
+    else:
+        tap_architecture = {
+            "version": "tap-v1-raw-timer",
+            "dynamic_state": "concat(all_state, skill_state[concept_id])",
+        }
+
     tap_contract = {
         "schema_version": "1.0",
         "model": "MobileKT v4 post-hoc TAP mastery readout",
         "file": "mobile_tap_readout.onnx",
         "initial_stats": "mobile_tap_initial_stats.npz",
+        "architecture": tap_architecture,
         "inputs": predict_contract["onnx_models"]["tap_readout"]["inputs"],
         "outputs": predict_contract["onnx_models"]["tap_readout"]["outputs"],
         "timer_features": [
@@ -927,6 +968,7 @@ def main() -> int:
         "tap_checkpoint_sha256": sha256_file(args.tap_checkpoint),
         "required_backbone_checkpoint_sha256": tap_checkpoint["base_checkpoint_sha256"],
         "probe_type": tap_checkpoint["probe_type"],
+        "probe_version": tap_checkpoint.get("probe_version", "v1"),
         "probe_config": tap_checkpoint["probe_config"],
         "valid_metrics": tap_checkpoint.get("valid_metrics", {}),
         "notes": [

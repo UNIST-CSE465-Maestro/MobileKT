@@ -35,6 +35,7 @@ from datasets import collate_fn, load_dataset
 from models import MobileKTV4
 from models.tap import (
     EbbinghausTimeAwareProbe,
+    SharedMIKTTimeAwareProbe,
     TimeAwareProbe,
     TimeAwareProbeConfig,
     build_future_correctness_labels,
@@ -52,7 +53,7 @@ DEFAULT_CHECKPOINT = (
     / "statics2011_qe_trainable_id_seed2024_lr1e-03_dp0p1_seed2024_lr1e-03_dp0.1_q1_d1_logit1_kt1"
     / "qe_distill_best.pt"
 )
-DEFAULT_OUT_DIR = ROOT / "experiments" / "statics2011_mobilekt4_tap_export"
+DEFAULT_OUT_DIR = ROOT / "experiments" / "statics2011_mobilekt4_tap_v2_shared_mikt"
 DEFAULT_DATA_DIR = ROOT.parents[1] / "data" / "datasets" / "KT"
 DEFAULT_QUESTION_FEATURES = DEFAULT_DATA_DIR / "statics2011" / "question_harrier_features.pt"
 
@@ -109,7 +110,20 @@ def load_mobilekt_v4(checkpoint_path: Path, device: torch.device) -> tuple[Mobil
     return model, {"args": args, "meta": meta}
 
 
-def make_probe(probe_type: str, cfg: TimeAwareProbeConfig) -> nn.Module:
+def make_probe(
+    probe_version: str,
+    probe_type: str,
+    cfg: TimeAwareProbeConfig,
+    model: MobileKTV4,
+) -> nn.Module:
+    if probe_version == "v2":
+        if probe_type != "mlp":
+            raise ValueError("TAP-v2 supports only the MLP readout")
+        return SharedMIKTTimeAwareProbe(
+            cfg,
+            model.backbone.skill_embed.weight,
+            model.backbone.time_state,
+        )
     if probe_type == "mlp":
         return TimeAwareProbe(cfg)
     if probe_type == "ebbinghaus":
@@ -334,6 +348,7 @@ def main() -> int:
     parser.add_argument("--epochs", type=int, default=10)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--weight_decay", type=float, default=1e-5)
+    parser.add_argument("--probe_version", choices=["v1", "v2"], default="v2")
     parser.add_argument("--probe_type", choices=["mlp", "ebbinghaus"], default="mlp")
     parser.add_argument("--probe_hidden_dim", type=int, default=128)
     parser.add_argument("--concept_dim", type=int, default=32)
@@ -372,6 +387,9 @@ def main() -> int:
         n_concepts=model.backbone.n_concepts,
         timer_dim=3,
         concept_dim=args.concept_dim,
+        shared_dim=model.backbone.d,
+        history_dim=model.backbone.d,
+        max_time_gap=model.backbone.max_seq_len,
         hidden_dim=args.probe_hidden_dim,
         dropout=args.dropout,
         horizon=args.horizon,
@@ -382,8 +400,9 @@ def main() -> int:
         forgetting_short_gap=args.forgetting_short_gap,
         forgetting_long_gap=args.forgetting_long_gap,
         max_decay_rate=args.max_decay_rate,
+        use_concept_embedding=args.probe_version == "v1",
     )
-    probe = make_probe(args.probe_type, cfg).to(device)
+    probe = make_probe(args.probe_version, args.probe_type, cfg, model).to(device)
     optimizer = Adam(probe.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     train_generator = torch.Generator().manual_seed(args.seed)
     eval_generator = torch.Generator().manual_seed(args.seed + 1)
@@ -391,7 +410,7 @@ def main() -> int:
     print(f"Checkpoint : {args.checkpoint}")
     print(f"Device     : {device}")
     print(f"Dataset    : train={len(train_ds)} valid={len(valid_ds)} test={len(test_ds)}")
-    print(f"Probe      : {args.probe_type} {asdict(cfg)}")
+    print(f"Probe      : {args.probe_version}/{args.probe_type} {asdict(cfg)}")
     start = time.time()
     best_valid = math.inf
     best_state: dict[str, Any] | None = None
@@ -415,7 +434,8 @@ def main() -> int:
             best_state = {
                 "probe_state_dict": probe.state_dict(),
                 "probe_config": asdict(cfg),
-                "probe_type": args.probe_type,
+                "probe_version": args.probe_version,
+                "probe_type": "shared_mikt_mlp" if args.probe_version == "v2" else args.probe_type,
                 "base_model_name": "mobilekt4",
                 "base_checkpoint": str(args.checkpoint),
                 "base_checkpoint_sha256": sha256_file(args.checkpoint),
@@ -436,11 +456,12 @@ def main() -> int:
     test_metrics = evaluate(probe, model, test_loader, cfg, args, device, eval_generator)
     report = {
         "schema_version": "1.0",
-        "model": "MobileKT v4 TAP",
+        "model": "MobileKT v4 TAP-v2 shared MIKT readout" if args.probe_version == "v2" else "MobileKT v4 TAP-v1",
         "base_checkpoint": str(args.checkpoint),
         "base_checkpoint_sha256": best_state["base_checkpoint_sha256"],
         "tap_checkpoint": str(checkpoint_path),
-        "probe_type": args.probe_type,
+        "probe_version": args.probe_version,
+        "probe_type": best_state["probe_type"],
         "probe_config": asdict(cfg),
         "best_valid": best_state["valid_metrics"],
         "test": test_metrics,
@@ -448,6 +469,7 @@ def main() -> int:
         "elapsed_seconds": time.time() - start,
         "notes": [
             "The MobileKT v4 backbone is frozen. Only the TAP readout is trained.",
+            "TAP-v2 reuses frozen MIKT skill_embed and time_state representations.",
             "TAP targets are future same-concept correctness proxies, not ground-truth psychological mastery labels.",
             "The export-compatible timer uses interaction-step gaps, not wall-clock elapsed time.",
         ],

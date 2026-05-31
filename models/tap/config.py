@@ -15,6 +15,9 @@ class TimeAwareProbeConfig:
     n_concepts: int
     timer_dim: int = 3
     concept_dim: int = 32
+    shared_dim: int = 64
+    history_dim: int = 64
+    max_time_gap: int = 200
     hidden_dim: int = 128
     n_layers: int = 2
     dropout: float = 0.1

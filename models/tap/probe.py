@@ -182,6 +182,118 @@ class TimeAwareProbe(nn.Module):
         raise ValueError("concept_ids must be None, 1D, or 2D")
 
 
+class SharedMIKTTimeAwareProbe(nn.Module):
+    """Decode mastery with frozen concept and time representations from MIKT."""
+
+    def __init__(
+        self,
+        cfg: TimeAwareProbeConfig,
+        skill_embed: torch.Tensor,
+        time_state: torch.Tensor,
+    ):
+        super().__init__()
+        if cfg.n_layers < 1:
+            raise ValueError("TimeAwareProbeConfig.n_layers must be >= 1")
+        if cfg.timer_dim != 3:
+            raise ValueError("SharedMIKTTimeAwareProbe expects three timer features")
+        if skill_embed.shape != (cfg.n_concepts + 1, cfg.shared_dim):
+            raise ValueError(
+                "skill_embed shape mismatch: "
+                f"expected {(cfg.n_concepts + 1, cfg.shared_dim)}, got {tuple(skill_embed.shape)}"
+            )
+        if time_state.dim() != 2 or time_state.shape[1] != cfg.shared_dim:
+            raise ValueError(
+                "time_state shape mismatch: "
+                f"expected (*, {cfg.shared_dim}), got {tuple(time_state.shape)}"
+            )
+        if time_state.shape[0] <= cfg.max_time_gap:
+            raise ValueError(
+                f"time_state must contain gap buckets 0..{cfg.max_time_gap}, "
+                f"got {time_state.shape[0]} rows"
+            )
+
+        self.cfg = cfg
+        self.register_buffer("skill_embed", skill_embed.detach().clone())
+        self.register_buffer("time_state", time_state.detach().clone())
+        self.history_encoder = nn.Sequential(
+            nn.Linear(2, cfg.history_dim),
+            nn.ReLU(),
+        )
+
+        input_dim = cfg.state_dim + cfg.shared_dim + cfg.shared_dim + cfg.history_dim
+        self.readout = self._build_mlp(input_dim, cfg)
+
+    @staticmethod
+    def _build_mlp(input_dim: int, cfg: TimeAwareProbeConfig) -> nn.Sequential:
+        layers: list[nn.Module] = []
+        if cfg.n_layers == 1:
+            layers.append(nn.Linear(input_dim, 1))
+        else:
+            layers.extend(
+                [
+                    nn.Linear(input_dim, cfg.hidden_dim),
+                    nn.ReLU(),
+                    nn.Dropout(cfg.dropout),
+                ]
+            )
+            for _ in range(cfg.n_layers - 2):
+                layers.extend(
+                    [
+                        nn.Linear(cfg.hidden_dim, cfg.hidden_dim),
+                        nn.ReLU(),
+                        nn.Dropout(cfg.dropout),
+                    ]
+                )
+            layers.append(nn.Linear(cfg.hidden_dim, 1))
+        return nn.Sequential(*layers)
+
+    def forward(
+        self,
+        hidden_state: torch.Tensor,
+        concept_ids: torch.Tensor | None = None,
+        timer_features: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        """Return mastery for paired ``(student, timestep, concept)`` samples."""
+        if hidden_state.dim() != 2:
+            raise ValueError("hidden_state must have shape (N, state_dim)")
+        if concept_ids is None:
+            raise ValueError("concept_ids are required")
+        if timer_features is None or timer_features.dim() != 2:
+            raise ValueError("timer_features must have shape (N, 3)")
+
+        timer_features = timer_features.to(hidden_state.dtype)
+        safe_ids = concept_ids.long().clamp(min=0, max=self.cfg.n_concepts)
+        concept_repr = self.skill_embed[safe_ids]
+        gap = torch.expm1(timer_features[:, 0]).round().clamp(
+            min=0,
+            max=self.cfg.max_time_gap,
+        ).long()
+        gap_repr = self.time_state[gap]
+        history_repr = self.history_encoder(timer_features[:, 1:])
+        z = torch.cat([hidden_state, concept_repr, gap_repr, history_repr], dim=-1)
+        return torch.sigmoid(self.readout(z).squeeze(-1))
+
+    def forward_concept_states(
+        self,
+        concept_state: torch.Tensor,
+        timer_features: torch.Tensor,
+        concept_ids: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        """Decode a full mastery vector from concept-aligned MIKT states."""
+        if concept_state.dim() != 3:
+            raise ValueError("concept_state must have shape (B, K+1, state_dim)")
+        if timer_features.dim() != 3:
+            raise ValueError("timer_features must have shape (B, K+1, timer_dim)")
+        if concept_state.shape[:2] != timer_features.shape[:2]:
+            raise ValueError("concept_state and timer_features must share B and K+1")
+
+        B, K1, _ = concept_state.shape
+        flat_state = concept_state.reshape(B * K1, -1)
+        flat_timer = timer_features.reshape(B * K1, -1)
+        flat_concepts = TimeAwareProbe._expand_concept_ids(B, K1, concept_state.device, concept_ids)
+        return self.forward(flat_state, flat_concepts, flat_timer).view(B, K1)
+
+
 class EbbinghausTimeAwareProbe(nn.Module):
     """Decode mastery with a structured elapsed-time decay term.
 

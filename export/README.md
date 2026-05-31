@@ -49,9 +49,14 @@ mobile_mikt_*.onnx:
   trained stateful mobile KT engine
 
 mobile_tap_readout.onnx:
-  post-hoc operational mastery readout trained against
+  TAP-v2 post-hoc operational mastery readout trained against
   future same-concept correctness
 ```
+
+TAP-v2 reuses the frozen MIKT `skill_embed` and `time_state` representations.
+Only its compact history encoder and mastery readout MLP are trained separately.
+These frozen lookup tables are packaged inside `mobile_tap_readout.onnx`, so
+the app does not need to store or pass them as additional inputs.
 
 For existing Statics2011 benchmark questions, `question_harrier_features.pt`
 was used during training as a precomputed Harrier feature cache. For new or
@@ -555,6 +560,17 @@ concept_mastery[c]
 
 It is not a directly observed psychological ground-truth label.
 
+Internally, TAP-v2 combines:
+
+```text
+concat(all_state, skill_state[c])     [128]
+frozen MIKT skill_embed[c]             [64]
+frozen MIKT time_state[clamped_gap]    [64]
+learned history representation         [64]
+-------------------------------------------
+readout input                          [320]
+```
+
 ### Persist Atomically
 
 After the TAP readout, persist:
@@ -583,6 +599,9 @@ gap_since_last_seen[c] =
   as_of_step - last_skill_time[c]      if tap_seen_count[c] > 0
   201                                  if the concept is unseen
 ```
+
+TAP-v2 clamps the resulting gap to `0..200` before looking up the frozen MIKT
+`time_state` representation.
 
 For an answer processed at local `step=t`:
 
@@ -683,7 +702,7 @@ python3 tools/train_mobilekt_v4_tap.py \
   --epochs 10 \
   --batch_size 8 \
   --max_samples_per_batch 8192 \
-  --out_dir experiments/statics2011_mobilekt4_tap_export
+  --out_dir experiments/statics2011_mobilekt4_tap_v2_shared_mikt
 '
 ```
 
@@ -700,8 +719,8 @@ The exporter verifies that the TAP checkpoint was trained against the exact
 backbone checkpoint SHA-256, checks all three ONNX graphs, runs them with
 `onnx.reference.ReferenceEvaluator`, and writes `onnx_reference_validation.json`.
 
-The repository ignores `*.onnx` files and `experiments/` by source-control
-policy. When delivering artifacts to the mobile app project, package every file
+Training runs under `experiments/` remain ignored by source-control policy.
+When versioning or delivering the mobile artifact bundle, include every file
 listed in `mobile_export_manifest.json`, including:
 
 ```text
@@ -730,9 +749,9 @@ backbone. Its report is copied into `tap_training_report.json`. Current TAP test
 metrics:
 
 ```text
-future same-KC AUC:  0.7787488699
-Brier:               0.0832442418
-ECE:                 0.0134869674
+future same-KC AUC:  0.7745983005
+Brier:               0.0830822662
+ECE:                 0.0189635158
 ```
 
 Do not attach `mobile_tap_readout.onnx` to a different backbone checkpoint.

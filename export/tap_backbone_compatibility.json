@@ -1,19 +1,23 @@
 {
   "schema_version": "1.0",
   "mikt_compatibility_version": "mobilekt4-stat-20260528-qe-e2e-teacher-seed2024-dp0.1",
-  "tap_checkpoint": "/workspace/maestro/MobileKT/experiments/statics2011_mobilekt4_tap_export/mobilekt_v4_tap_best.pt",
-  "tap_checkpoint_sha256": "50ef89dcafedcc93aa59bd1875d60a786deb9bc085ff317e0f98f535588b61b5",
+  "tap_checkpoint": "/workspace/maestro/MobileKT/experiments/statics2011_mobilekt4_tap_v2_shared_mikt/mobilekt_v4_tap_best.pt",
+  "tap_checkpoint_sha256": "664cda2b9abeb1b3b5dfbce533eac087f1e3f3f591c0a034e7c1653b45699744",
   "required_backbone_checkpoint_sha256": "7f61b4bc603e34dc1d98ebedb60038b6b460bc4ff5e06660107ce7f3421f94b2",
-  "probe_type": "mlp",
+  "probe_type": "shared_mikt_mlp",
+  "probe_version": "v2",
   "probe_config": {
     "state_dim": 128,
     "n_concepts": 640,
     "timer_dim": 3,
     "concept_dim": 32,
+    "shared_dim": 64,
+    "history_dim": 64,
+    "max_time_gap": 200,
     "hidden_dim": 128,
     "n_layers": 2,
     "dropout": 0.1,
-    "use_concept_embedding": true,
+    "use_concept_embedding": false,
     "horizon": 50,
     "tau": 20.0,
     "label_mode": "decayed_average",
@@ -27,11 +31,11 @@
     "max_decay_rate": 2.0
   },
   "valid_metrics": {
-    "loss": 0.4807623949092049,
+    "loss": 0.48297956678562354,
     "samples": 35694.0,
-    "auc": 0.7705675959587097,
-    "brier": 0.09523728489875793,
-    "ece": 0.01610126532614231
+    "auc": 0.7685373425483704,
+    "brier": 0.09611352533102036,
+    "ece": 0.03369953855872154
   },
   "notes": [
     "Do not attach this TAP readout to a different MobileKT backbone latent space.",

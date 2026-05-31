@@ -7,15 +7,15 @@
   "expected_tap_mastery": "validation_expected_tap_mastery.npz",
   "sample_input": "validation_sample_input.json",
   "expected": {
-    "initial_concept_mastery_sha256": "ff5acac741d3b1ac4486e702732fd9ee0350c47cf28651fa9f6c5f8707af4a91",
-    "updated_concept_mastery_sha256": "c95ad5907514c563d2b47c42327fc08203748a07f9efb03a23e9b2a6e9b0f8b3",
+    "initial_concept_mastery_sha256": "88d9e1cb06c95ac9eaedae002a5b2fe2ea961aa247838d497a9ba2b92bf61db6",
+    "updated_concept_mastery_sha256": "b0fe0c50218d3e565467584fd52d1784b21bf00b0ac253aac29e081841e71e55",
     "initial_padding_mastery": 0.0,
     "updated_padding_mastery": 0.0,
     "updated_concept_ids": [
       593
     ],
     "updated_concept_mastery": {
-      "593": 0.8047364950180054
+      "593": 0.8581623435020447
     }
   },
   "tolerance": {

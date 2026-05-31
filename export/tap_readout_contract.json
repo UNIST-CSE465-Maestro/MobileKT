@@ -3,6 +3,19 @@
   "model": "MobileKT v4 post-hoc TAP mastery readout",
   "file": "mobile_tap_readout.onnx",
   "initial_stats": "mobile_tap_initial_stats.npz",
+  "architecture": {
+    "version": "tap-v2-shared-mikt",
+    "dynamic_state": "concat(all_state, skill_state[concept_id])",
+    "frozen_mikt_representations": [
+      "skill_embed[concept_id]",
+      "time_state[clamp(gap_since_last_seen, 0, max_time_gap)]"
+    ],
+    "learned_tap_components": [
+      "history_encoder(log1p(tap_seen_count), tap_recent_correct_rate)",
+      "readout_mlp"
+    ],
+    "readout_input_dim": 320
+  },
   "inputs": {
     "skill_state": {
       "dtype": "float32",

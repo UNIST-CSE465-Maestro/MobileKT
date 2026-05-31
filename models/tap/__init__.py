@@ -10,10 +10,11 @@ from .losses import (
     soft_binary_cross_entropy,
     time_aware_probe_loss,
 )
-from .probe import EbbinghausTimeAwareProbe, TimeAwareProbe
+from .probe import EbbinghausTimeAwareProbe, SharedMIKTTimeAwareProbe, TimeAwareProbe
 
 __all__ = [
     "TimeAwareProbe",
+    "SharedMIKTTimeAwareProbe",
     "EbbinghausTimeAwareProbe",
     "TimeAwareProbeConfig",
     "build_timer_features",
