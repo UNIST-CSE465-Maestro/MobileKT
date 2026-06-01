@@ -59,7 +59,7 @@ Learning for Knowledge Tracing) Framework:**
     KCQRL 같은 경우 새로운 KT 모델이 아닌, 기존 연구에 LLM을 활용하여 KC annotation 및 Solution step을 제시하고, Encoder를 활용해 Question Embedding을 제공하는 Framework를 제시하였다. 이는 MobileKT의 Question Generation 및 Question Encoder의 구조 설게에 참고 가능하며 특히 KCQRL의 Encoder 부분을 아키텍쳐적으로 분석해 본 연구에서도 이를 기반으로 설계해 검증할 수 있다.
     
 
-*Fig1. MIKT Model Architecture:*
+*Fig2. MIKT Model Architecture:*
 
 ![MIKT-architecture.png](MIKT-architecture.png)
 
@@ -78,6 +78,10 @@ TAP(Time-Aware Probe)는 MobileKT에서 사용자의 지식 수준을 직접 업
 $$
 \text{Does the frozen KT knowledge state contain decodable concept-level mastery information?}
 $$
+
+*Fig3. TAP-module Diagram:*
+
+![TAP-module.jpg](TAP-module.jpg)
 
 이를 위해 pretrained MIKT backbone은 freeze하고, TAP의 작은 readout network만 별도로 학습한다. 이 설계는 backbone의 prediction 능력을 훼손하지 않으면서, hidden state 안에 concept별 숙련도 정보가 얼마나 안정적으로 담겨 있는지를 검증할 수 있게 한다.
 
