@@ -3,7 +3,7 @@
 
 [Previous MobileKT Architecture (Scalar Hidden Mastery state)](https://www.notion.so/Previous-MobileKT-Architecture-Scalar-Hidden-Mastery-state-35e95612494780939e50c24b0c86cb31?pvs=21)
 
-MobileKT는 모바일 디바이스에서 사용자의 지식 수준 상태를 각 개념별 Scalar값으로 추적하는 아키텍쳐이다. 기존에 설계한 아키텍쳐는 MIKT를 기반으로 스칼라(단일 차원)의 Knowledge State를 가질 수 있도록 하였다. 그러나 다른 KT모델 대비 성능이 많이 하락하였으며  특히 동일한 도메인에서 기존 MIKT가 보여주던 성능과 비교한 결과 급감(0.1 ~ 0.2 AUC 감소)하였다. 추가적으로 연구적으로 유의미한 아키텍쳐임을 증명하기에 근거가 부족하다는 문제점이 있다. 이에 기존 KT 모델의 아키텍쳐(다차원 Knowledge state)를 변경하지 않고 시간 반영 Mastery 해석 모듈(TAP)과 문항 인코더(Question Encoder)를 결합해 유용성 및 실용성을 높이고자 하였다. 기존 모델을 그대로 활용하기에 추론 능력은 보존되며 문항 인코더를 활용해 Question Domian의 제한성을 줄였으며 사용자가 각 개념에 대해 얼만큼 숙달되었는지 명시적으로 제공해 학습 효율을 증대시킬  수 있다.
+MobileKT는 모바일 디바이스에서 사용자의 지식 수준 상태를 각 개념별 Scalar값으로 추적하는 아키텍쳐이다. 기존에 설계한 아키텍쳐는 MIKT를 기반으로 스칼라(단일 차원)의 Knowledge State를 가질 수 있도록 하였다. 그러나 다른 KT모델 대비 성능이 많이 하락하였으며  특히 동일한 도메인에서 기존 MIKT가 보여주던 성능과 비교한 결과 급감(0.1 ~ 0.2 AUC 감소)하였다. 추가적으로 연구적으로 유의미한 아키텍쳐임을 증명하기에 근거가 부족하다는 문제점이 있다. 이에 기존 KT 모델의 아키텍쳐(다차원 Knowledge state)를 변경하지 않고 시간 반영 Mastery 해석 모듈(TAP)과 문항 인코더(Question Encoder)를 결합해 유용성 및 실용성을 높이고자 하였다. 기존 모델을 그대로 활용하기에 추론 능력은 보존되며 문항 인코더를 활용해 Question Domain의 제한성을 줄였고, 사용자가 각 개념에 대해 얼마나 숙달되었는지 명시적으로 제공해 학습 효율을 증대시킬 수 있다.
 
 *Fig1. MobileKT Architecture Overview:*
 
@@ -38,9 +38,9 @@ Multi-concept handling은 특히 중요하다. 실제 교육 문항은 단일 KC
 
 | Criterion | Judgment | Detailed Reason |
 | --- | --- | --- |
-| Predictive Strength | Pass | ACM MM 2024 논문에서 ReKT는 question-based KT 기준 여러 dataset에서 best 또는 near-best 성능을 보고한다. 따라서 “가벼운 모델은 약하다”는 반론을 막는 데 중요한 기어를 하였다. |
+| Predictive Strength | Pass | ACM MM 2024 논문에서 ReKT는 question-based KT 기준 여러 dataset에서 best 또는 near-best 성능을 보고한다. 따라서 “가벼운 모델은 약하다”는 반론을 막는 데 중요한 역할을 한다. |
 | Knowledge-State Mastery | Partial | question/skill/domain state가 명확히 분리되어 TAP probing 후보가 될 수 있다. 하지만 MIKT처럼 concept id마다 독립 state row가 지속되는 구조는 아니므로 concept별 mastery readout의 안정성은 추가 검증이 필요하다. |
-| Mobile Feasibility | Pass | 논문은 FRU가 LSTM/Transformer core 대비 약 `38%` computing resources를 사용한다고 보고하며, local dummy runtime에서도 ReKT가 MIKT/QIKT보다 빠른 축에 속했다. 이는 충분히 모바일 디바이스에서 동작 가능하며 구체적으로 입증된 |
+| Mobile Feasibility | Pass | 논문은 FRU가 LSTM/Transformer core 대비 약 `38%` computing resources를 사용한다고 보고하며, local dummy runtime에서도 ReKT가 MIKT/QIKT보다 빠른 축에 속했다. 이는 ReKT를 lightweight/mobile feasibility baseline으로 두기에 적합한 근거가 된다. |
 | Content-Aware Extensibility | Partial | question embedding과 skill embedding이 있어 content embedding으로 교체 가능하지만, 원 논문의 핵심은 content-aware representation이 아니라 simple powerful update architecture다. |
 | Multi-Concept Handling | Partial | current skill을 gather-update하는 구조라 single current concept에는 잘 맞는다. multi-KC item에서는 여러 skill state를 aggregate하고 다시 분배하는 rule이 필요하므로, MobileKT의 native multi-concept update와는 차이가 난다. |
 - **QIKT (Improving Interpretability of Deep Sequential Knowledge Tracing Models with
@@ -56,14 +56,14 @@ Question-centric Cognitive Representations):**
 - **KCQRL (Automated Knowledge Concept Annotation and Question Representation
 Learning for Knowledge Tracing) Framework:**
     
-    KCQRL 같은 경우 새로운 KT 모델이 아닌, 기존 연구에 LLM을 활용하여 KC annotation 및 Solution step을 제시하고, Encoder를 활용해 Question Embedding을 제공하는 Framework를 제시하였다. 이는 MobileKT의 Question Generation 및 Question Encoder의 구조 설게에 참고 가능하며 특히 KCQRL의 Encoder 부분을 아키텍쳐적으로 분석해 본 연구에서도 이를 기반으로 설계해 검증할 수 있다.
+    KCQRL 같은 경우 새로운 KT 모델이 아닌, 기존 연구에 LLM을 활용하여 KC annotation 및 Solution step을 제시하고, Encoder를 활용해 Question Embedding을 제공하는 Framework를 제시하였다. 이는 MobileKT의 Question Generation 및 Question Encoder의 구조 설계에 참고 가능하며 특히 KCQRL의 Encoder 부분을 아키텍쳐적으로 분석해 본 연구에서도 이를 기반으로 설계해 검증할 수 있다.
     
 
 *Fig2. MIKT Model Architecture:*
 
 ![MIKT-architecture.png](MIKT-architecture.png)
 
-결론적으로, 본 연구에 있어 가장 좋은 Backbone Engine은 MIKT라고 볼 수 있다. 특히 User Experience 측면에서 보았을때 실용성을 직접적으로 드러내는 Concept별 Mastery를 추출하기에 최적의 모델 구조를 가지고 있다. 또한 문항과 관련된 Multi-Concept를 그 자체로 활용할 수 있어 다양한 Concept 조합에도 유연하게 대처하며 Question Embedding을 활용하는 아키텍쳐이므로 Question Encoder와의 점목도 원활할 것으로 에상된다.
+결론적으로, 본 연구에 있어 가장 좋은 Backbone Engine은 MIKT라고 볼 수 있다. 특히 User Experience 측면에서 보았을때 실용성을 직접적으로 드러내는 Concept별 Mastery를 추출하기에 최적의 모델 구조를 가지고 있다. 또한 문항과 관련된 Multi-Concept를 그 자체로 활용할 수 있어 다양한 Concept 조합에도 유연하게 대처하며 Question Embedding을 활용하는 아키텍쳐이므로 Question Encoder와의 접목도 원활할 것으로 예상된다.
 
 *베이스라인 모델선정을 위한 비교 분석 문서 (Appendix):*
 
@@ -268,12 +268,74 @@ Question Encoder 학습에 관한 방법론은 아래 두 가지로 나눌 수 �
 
 Training objective는 학습 전략에 따라 다르게 정의한다. 두 전략은 같은 Question Encoder를 사용하지만, 검증하려는 연구 질문이 다르기 때문이다. MIKT First 방식은 raw question content가 기존 MIKT의 item representation을 얼마나 잘 복원할 수 있는지 확인하는 것이 핵심이고, End-to-End 방식은 Question Encoder가 downstream KT prediction에 직접적으로 유용한 representation을 학습할 수 있는지 확인하는 것이 핵심이다.
 
-공통적으로 사용하는 loss term은 아래와 같다.
+실제 구현에서 사용하는 loss term은 아래와 같다. 여기서 $\mathcal{I}$는 padding이 아닌 question position의 집합, $\mathcal{P}$는 다음 응답을 예측할 수 있는 valid prediction position의 집합이다. Question embedding dimension은 $d_q = 64$이다.
 
-- $L_q$: $\hat{q_t}$와 MIKT embedding table의 $q_t$ 사이의 MSE 또는 cosine distance
-- $L_{diff}$: $\widehat{Diff}_{q_t}$와 MIKT learned difficulty parameter 사이의 regression loss
-- $L_{logit}$: 기존 MIKT teacher의 prediction logit과 Question Encoder 기반 MIKT output 사이의 distillation loss
-- $L_{KT}$: 실제 student response에 대한 BCE loss
+- **Question embedding reconstruction loss**
+
+$$
+L_q
+=
+\frac{1}{|\mathcal{I}|d_q}
+\sum_{(b,t)\in\mathcal{I}}
+\left\|
+\hat{q}_{b,t} - q^{teacher}_{b,t}
+\right\|_2^2
+$$
+
+$\hat{q}_{b,t}$는 Question Encoder가 생성한 question embedding이고, $q^{teacher}_{b,t}$는 기존 MIKT teacher의 question ID embedding table에서 조회한 embedding이다. 실제 구현에서는 element-wise **MSE loss**를 사용한다. Cosine similarity는 학습 loss로 사용하지 않으며, embedding 방향이 얼마나 유사한지 확인하기 위한 evaluation metric으로만 기록한다.
+
+- **Difficulty reconstruction loss**
+
+$$
+L_{diff}
+=
+\frac{1}{|\mathcal{I}|}
+\sum_{(b,t)\in\mathcal{I}}
+\left(
+\widehat{Diff}_{b,t} - Diff^{teacher}_{b,t}
+\right)^2
+$$
+
+$\widehat{Diff}_{b,t}$는 Question Encoder의 difficulty head가 생성한 scalar이고, $Diff^{teacher}_{b,t}$는 기존 MIKT teacher가 question ID별로 학습한 scalar difficulty parameter이다. 실제 regression loss는 **MSE loss**이다. 이 값은 Bloom taxonomy level이나 정답 확률이 아니라, MIKT 내부에서 사용하는 unbounded latent difficulty scalar이다.
+
+- **Prediction logit distillation loss**
+
+$$
+L_{logit}
+=
+\frac{1}{|\mathcal{P}|}
+\sum_{(b,t)\in\mathcal{P}}
+\left(
+z^{student}_{b,t} - z^{teacher}_{b,t}
+\right)^2
+$$
+
+$$
+z
+=
+\operatorname{logit}
+\left(
+\operatorname{clamp}(p, \epsilon, 1-\epsilon)
+\right)
+$$
+
+$p^{student}$는 Question Encoder 기반 MIKT student가 출력한 다음 응답 정답 확률이고, $p^{teacher}$는 기존 question ID 기반 MIKT teacher의 정답 확률이다. 실제 구현에서는 두 확률을 numerical stability를 위해 clamp한 뒤 logit으로 변환하고, valid prediction position에서 **MSE loss**를 계산한다. 즉, probability 간 MSE나 KL divergence를 사용하는 것이 아니다.
+
+- **Knowledge Tracing response loss**
+
+$$
+L_{KT}
+=
+-\frac{1}{|\mathcal{P}|}
+\sum_{(b,t)\in\mathcal{P}}
+\left[
+r_{b,t+1}\log p^{student}_{b,t}
++
+(1-r_{b,t+1})\log(1-p^{student}_{b,t})
+\right]
+$$
+
+$L_{KT}$는 Question Encoder 기반 MIKT student의 prediction과 실제 다음 student response 사이에서 계산하는 masked **binary cross entropy (BCE) loss**이다.
 
 **MIKT First, Question Encoder after Training**에서는 pretrained MIKT를 teacher로 고정하고, Question Encoder만 학습한다. 이 setting에서 $L_q$와 $L_{diff}$는 auxiliary loss가 아니라 main objective이다. 즉 Question Encoder는 raw question으로부터 기존 MIKT가 Question ID lookup table에서 사용하던 $(q_t, Diff_{q_t})$를 복원하도록 학습된다.
 
@@ -281,21 +343,37 @@ $$
 L_{QE}^{distill} = \lambda_1 L_q + \lambda_2 L_{diff}
 $$
 
-이후 teacher MIKT와의 prediction compatibility를 높이기 위해 $L_{logit}$을 추가할 수 있으며, frozen MIKT 위에서 실제 response prediction 방향을 약하게 보정하기 위해 작은 weight의 $L_{KT}$를 추가할 수 있다.
+Teacher MIKT와의 prediction compatibility까지 보존하기 위해 $L_{logit}$을 추가할 수 있다.
 
 $$
-L_{QE}^{distill+pred} = \lambda_1 L_q + \lambda_2 L_{diff} + \lambda_3 L_{logit} + \lambda_4 L_{KT}
+L_{QE}^{distill+logit} = \lambda_1 L_q + \lambda_2 L_{diff} + \lambda_3 L_{logit}
 $$
 
 이때 MIKT backbone은 freeze하는 것을 원칙으로 한다. 그렇지 않으면 Question Encoder가 MIKT의 기존 latent space를 복원하는지, 아니면 MIKT 자체가 새로운 representation에 맞게 변하는지 구분하기 어렵다.
 
-**End-to-End (Question Encoder → MIKT) Training**에서는 최종 KT prediction 성능이 main objective이다. 따라서 $L_{KT}$가 중심이 되며, pretrained MIKT teacher를 함께 사용하는 경우에만 $L_q$, $L_{diff}$, $L_{logit}$을 regularization 또는 teacher guidance로 추가한다.
+**End-to-End (Question Encoder → MIKT) Training**에서는 Question Encoder와 MIKT student backbone을 함께 업데이트한다. Pretrained MIKT teacher는 frozen 상태로 유지하며, 실제 KT prediction 성능을 직접 최적화하기 위해 $L_{KT}$를 추가한다.
 
 $$
-L_{QE}^{e2e} = L_{KT} + \lambda_1 L_q + \lambda_2 L_{diff} + \lambda_3 L_{logit}
+L_{QE}^{e2e}
+=
+\lambda_1 L_q
++
+\lambda_2 L_{diff}
++
+\lambda_3 L_{logit}
++
+\lambda_4 L_{KT}
 $$
 
-위 식에서 teacher guidance term을 사용하지 않는 순수 end-to-end setting은 $\lambda_1=\lambda_2=\lambda_3=0$인 경우로 볼 수 있다. End-to-End 방식은 다시 두 가지로 나눌 수 있다. 첫째, Question Encoder와 MIKT를 처음부터 함께 학습하는 `E2E-scratch` setting이다. 이때는 별도의 teacher target 없이 $L_{KT}$만 사용한다. 둘째, MIKT First distillation으로 Question Encoder를 먼저 안정화한 뒤, MIKT 일부 또는 전체를 unfreeze하여 jointly fine-tuning하는 `Distill-then-Joint` setting이다. 이때는 pretrained MIKT의 representation을 유지하기 위해 $L_q$, $L_{diff}$, $L_{logit}$을 추가할 수 있다. 본 연구에서는 두 방법을 모두 실험하되, 초기 main setting은 안정성과 해석 가능성을 위해 `MIKT First + frozen MIKT`와 `Distill-then-Joint`를 중심으로 비교한다.
+현재 MobileKT export에 반영된 최종 모델은 **QE-E2E+Teacher** setting이다. 실제 학습에서는 $\lambda_1=\lambda_2=\lambda_3=\lambda_4=1.0$을 사용했으므로 최종 objective는 아래와 같다.
+
+$$
+L_{QE\text{-}E2E+Teacher}
+=
+L_q + L_{diff} + L_{logit} + L_{KT}
+$$
+
+이 접근은 Question Encoder embedding이 기존 ID embedding을 단순 복제하는 데 머무르지 않고, 실제 response prediction에 필요한 방향으로 함께 조정되도록 한다. 학습 결과를 분석할 때 기록하는 question embedding cosine similarity와 difficulty Pearson correlation은 evaluation metric이며, optimization objective에는 포함하지 않는다.
 
 학습 과정에서 MIKT의 multi-concept handling은 기존 `pro2skill` 또는 q-matrix mapping에 맡기며, Question Encoder는 concept weight를 새로 예측하지 않는다. generated question에서는 Quiz Generator가 어떤 concept으로 문항을 만들지 사전에 결정하므로, KC mapping은 해당 generation metadata 또는 Concept Profiler 결과를 그대로 사용한다.
 
@@ -312,6 +390,82 @@ Question Encoder의 유효성은 단순 random split보다 unseen question/gener
 | `QE-Scratch-E2E` | Question Encoder와 MIKT를 처음부터 함께 학습하는 end-to-end setting |
 
 Evaluation split은 seen-question split뿐 아니라 unseen-question, unseen-problem, unseen-KC-combination split을 포함해야 한다. 평가 지표로는 KT prediction AUC/ACC/RMSE/BCE뿐 아니라, $\hat{q_t}$와 teacher $q_t$의 cosine similarity, $\widehat{Diff}_{q_t}$와 teacher $Diff_{q_t}$의 Pearson/Spearman correlation, teacher-student logit difference를 함께 확인한다. Bloom-style difficulty는 Question Encoder 학습 및 평가에서는 제외하고, 추후 Quiz Generation policy를 설계할 때 별도 항목으로 다룬다.
+
+### 1-4. Current Experimental Results
+
+현재까지의 실험은 크게 네 단계로 정리할 수 있다. 첫째, Statics 2011에서 어떤 KT backbone이 구조적으로 적합한지 확인하기 위한 pyKT baseline 재현 실험을 수행했다. 둘째, MobileKT v4 backbone 위에서 기존 ID embedding table과 Harrier 기반 Question Encoder를 비교했다. 셋째, ID 기반 MIKT teacher를 활용한 Question Encoder distillation 및 teacher-guided end-to-end 학습을 검증했다. 넷째, 최종 frozen MobileKT v4 backbone 위에 TAP-v2 mastery readout을 학습하고 모바일 export 가능성을 확인했다.
+
+#### 1-4-1. Statics 2011 KT Baseline
+
+먼저 Statics 2011의 `statics2011_kc` setting에서 여러 KT baseline을 같은 fold/seed protocol로 재현했다. 이 setting은 633 question, 85 atomic concept, 최대 3 concepts per item을 갖는 question+concept setting이다. 모든 결과는 5 folds x 3 seeds, 총 15 runs의 평균과 표준편차이다.
+
+| Model | Test AUC | Test ACC | Role in this study |
+| --- | ---: | ---: | --- |
+| ReKT | 0.8747 ± 0.0039 | 0.8409 ± 0.0021 | strongest lightweight/mobile baseline |
+| MIKT | 0.8677 ± 0.0010 | 0.8420 ± 0.0007 | closest structural concept-state backbone |
+| AKT | 0.8644 ± 0.0035 | 0.8342 ± 0.0015 | strong attention KT reference |
+| DTransformer | 0.8613 ± 0.0015 | 0.8355 ± 0.0026 | sequence-stability reference |
+| DKT | 0.8435 ± 0.0024 | 0.8245 ± 0.0024 | canonical neural KT baseline |
+
+ReKT가 가장 높은 AUC를 보였지만, MIKT는 매우 근접한 성능과 낮은 표준편차를 보였고, concept별 `skill_state` matrix를 직접 유지한다는 점에서 MobileKT의 TAP/mastery readout과 가장 자연스럽게 연결된다. 따라서 본 연구에서는 ReKT를 lightweight/mobile baseline으로 두고, MIKT를 MobileKT의 핵심 backbone으로 선택한다.
+
+#### 1-4-2. MobileKT v4 ID Embedding vs Harrier Question Encoder
+
+MobileKT v4에서는 같은 MIKT-style backbone 위에서 두 가지 question representation을 비교했다. `ID embedding table`은 기존 KT benchmark 방식처럼 question ID별 embedding과 difficulty를 직접 학습한다. `Harrier QE`는 raw question metadata를 Harrier feature로 변환한 뒤 Question Encoder head를 통해 MIKT-compatible $(\hat{q_t}, \widehat{Diff}_{q_t})$를 생성한다.
+
+| Method | Test AUC mean ± sd | Test ACC mean ± sd | Best test AUC |
+| --- | ---: | ---: | ---: |
+| ID embedding table | 0.8468 ± 0.0045 | 0.8442 ± 0.0013 | 0.8534 |
+| Harrier QE, $L_{KT}$ only | 0.8293 ± 0.0047 | 0.8359 ± 0.0016 | 0.8369 |
+
+이 결과는 raw question content 기반 Question Encoder만으로도 AUC 0.82-0.84 영역에 도달할 수 있음을 보인다. 그러나 단순 end-to-end $L_{KT}$ 학습만으로는 ID embedding teacher 대비 평균 약 0.0175 AUC gap이 남았다. 따라서 Question Encoder를 KT loss만으로 학습하기보다, teacher의 item representation과 prediction behavior를 함께 활용하는 distillation setting이 필요하다는 결론을 얻었다.
+
+#### 1-4-3. Question Encoder Distillation And Teacher-Guided E2E
+
+이후 pretrained `MIKT-ID` teacher를 고정하고, Question Encoder 기반 student가 teacher의 question embedding, internal difficulty, prediction logit을 얼마나 잘 재현하는지 실험했다. 최종적으로는 MIKT student backbone까지 trainable하게 두고 $L_q + L_{diff} + L_{logit} + L_{KT}$를 함께 사용하는 **QE-E2E+Teacher** setting을 적용했다.
+
+| Setting | Backbone | Loss | Test AUC | Test ACC | q cosine | diff Pearson | logit MSE |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: |
+| `QE-Distill-q+diff` | frozen | $L_q + L_{diff}$ | 0.7546 | 0.8226 | 0.2430 | 0.6294 | - |
+| `QE-Distill+Logit` | frozen | $L_q + L_{diff} + L_{logit}$ | 0.7968 | 0.8299 | 0.0813 | 0.5979 | 0.7550 |
+| `QE-E2E+Teacher` | trainable | $L_q + L_{diff} + L_{logit} + L_{KT}$ | 0.8445 | 0.8431 | 0.1086 | 0.6149 | 0.2168 |
+
+Reference 결과는 다음과 같다.
+
+| Setting | Test AUC | Test ACC |
+| --- | ---: | ---: |
+| `MIKT-ID` teacher | 0.8534 | 0.8462 |
+| Harrier QE end-to-end, previous best | 0.8369 | 0.8382 |
+
+$L_q + L_{diff}$만 사용하는 frozen distillation은 representation reconstruction 관점에서는 의미가 있지만, downstream prediction compatibility를 충분히 보존하지 못했다. $L_{logit}$을 추가하면 frozen backbone에서도 AUC가 0.7546에서 0.7968로 상승한다. 그러나 가장 좋은 결과는 backbone을 trainable하게 두고 teacher guidance와 KT objective를 함께 사용하는 경우였다. `QE-E2E+Teacher`는 test AUC 0.8445로 기존 Harrier $L_{KT}$ only best 0.8369를 넘었고, ID teacher 0.8534와의 gap을 0.0089까지 줄였다.
+
+이 결과는 본 연구의 Question Encoder를 단순 text embedding adapter가 아니라, **MIKT teacher의 latent item space와 prediction behavior를 함께 따라가도록 학습된 KT-compatible content encoder**로 정의해야 함을 보여준다.
+
+#### 1-4-4. TAP-v2 Mastery Readout
+
+최종 export에 포함된 TAP-v2는 위 `QE-E2E+Teacher` checkpoint를 frozen backbone으로 사용한다. TAP-v2는 별도의 TAP 전용 concept embedding을 두지 않고, frozen MIKT의 `skill_embed`와 `time_state` representation을 재사용한다. 학습 label은 ground-truth mastery annotation이 아니라, horizon $H=50$, $\tau=20$의 decayed future same-concept correctness이다.
+
+| Split | Loss | Samples | AUC | Brier | ECE |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Valid | 0.4830 | 35,694 | 0.7685 | 0.0961 | 0.0337 |
+| Test | 0.4466 | 37,388 | 0.7746 | 0.0831 | 0.0190 |
+
+이 결과는 frozen MobileKT v4 state 안에 future same-concept correctness를 예측할 수 있는 concept-level mastery signal이 decoding 가능함을 보여준다. 단, TAP 출력은 심리학적으로 직접 관측된 true mastery가 아니라, 가까운 미래의 same-concept correctness에 calibrated된 operational mastery readout이다.
+
+#### 1-4-5. Mobile Export And Runtime Validation
+
+최종 모바일 export는 다음 artifact를 포함한다.
+
+| Artifact | Role |
+| --- | --- |
+| `mobile_mikt_predict.onnx` | 현재 state와 question representation으로 next correctness를 예측 |
+| `mobile_mikt_update.onnx` | 응답 이후 on-device student state를 갱신 |
+| `mobile_tap_readout.onnx` | local state와 TAP profile statistics로 concept mastery를 출력 |
+| `qe_server_question_encoder.pt` | 서버에서 raw/generated question을 MIKT-compatible representation으로 변환 |
+
+ONNX reference validation도 통과했다. PyTorch 기준값과 ONNX ReferenceEvaluator 출력의 최대 절대 오차는 prediction에서 0.0, state update에서 약 $1.79 \times 10^{-7}$, TAP mastery에서 약 $5.96 \times 10^{-8}$ 수준이었다. 따라서 현재 구현은 서버 Question Encoder + 모바일 MIKT update + 모바일 TAP readout으로 분리된 deployment path까지 검증된 상태이다.
+
+중요한 caveat는 현재 모든 MobileKT v4/QE/TAP 결과가 **student-level random split** 기준이라는 점이다. 따라서 generated question 또는 unseen question 성능을 최종 claim으로 강하게 주장하려면 unseen-question, unseen-problem, unseen-KC-combination split에서 추가 검증이 필요하다. 현재 결과는 "content-based Question Encoder와 TAP readout을 MIKT-style MobileKT에 결합했을 때 기존 ID teacher에 가까운 KT 성능과 on-device mastery readout이 가능하다"는 proof-of-concept evidence로 해석하는 것이 안전하다.
 
 ## 2. Related Works
 
@@ -353,7 +507,7 @@ LPKT와 HawkesKT는 시간 간격과 forgetting을 명시적으로 모델링한�
 
 UKT는 학생의 knowledge state를 deterministic vector가 아니라 uncertainty를 가진 distribution으로 보려는 접근이다. MobileKT가 mastery readout을 AUC뿐 아니라 Brier, ECE 같은 calibration 지표로 평가한다면, uncertainty-aware baseline은 매우 중요하다.
 
-RobustKT/RoubstKT 계열은 carelessness, fatigue, random error처럼 학습 데이터에 섞이는 noisy response를 분리하려는 흐름이다. MobileKT의 핵심 주장이 robustness가 아니라면 main baseline보다는 secondary 또는 appendix 후보로 두는 편이 좋다.
+RobustKT 계열은 carelessness, fatigue, random error처럼 학습 데이터에 섞이는 noisy response를 분리하려는 흐름이다. MobileKT의 핵심 주장이 robustness가 아니라면 main baseline보다는 secondary 또는 appendix 후보로 두는 편이 좋다.
 
 ### 2.7 LLM-Based KT
 
