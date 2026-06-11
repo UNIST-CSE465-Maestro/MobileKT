@@ -535,7 +535,7 @@ SAKT는 self-attention을 KT에 도입한 대표 모델이고, AKT는 Rasch-styl
 
 DTransformer는 단순 response pattern이 아니라 stable knowledge state를 추적해야 한다는 문제의식을 제기한다. MobileKT도 next-response prediction만이 아니라 knowledge-state quality와 mastery readout을 평가하므로, DTransformer는 prediction baseline 이상의 의미를 갖는다.
 
-최근 attention 계열에서는 stableKT, FoLiBiKT, LefoKT처럼 length generalization과 forgetting bias를 다루는 모델들이 등장했다. 이들은 긴 학습 이력, 시간 경과, forgetting을 평가할 때 유용하다. 특히 LefoKT는 forgetting-aware attention을 통해 time-aware KT baseline으로 적합하다.
+최근 attention 계열에서는 FoLiBiKT처럼 length generalization과 forgetting bias를 다루는 모델들이 등장했다. 이들은 긴 학습 이력, 시간 경과, forgetting을 평가할 때 유용하며, MobileKT의 time-aware TAP readout과 비교할 수 있는 중요한 reference point가 된다.
 
 ### 2.5 Question-Centric And Content-Aware KT
 
@@ -558,3 +558,51 @@ RobustKT 계열은 carelessness, fatigue, random error처럼 학습 데이터에
 LLM-KT, RAG-KT, Thinking-KT 같은 최근 연구는 LLM의 reasoning, retrieval, natural language explanation을 KT에 결합한다. 이 흐름은 generated quiz와 content-aware KT 관점에서 중요하지만, MobileKT의 baseline으로 바로 넣기에는 주의가 필요하다.
 
 첫째, LLM-based KT는 inference cost가 크고 모바일 배포 baseline으로 공정하지 않을 수 있다. 둘째, 모델이 학생별 compact state를 유지한다기보다 prompt context, retrieval memory, reasoning trace에 의존하는 경우가 많다. 셋째, 기존 KT benchmark와 다른 evaluation setting을 요구할 수 있다. 따라서 LLM-based KT는 main baseline보다는 discussion 또는 future comparison으로 두고, 실제 content-aware baseline은 KCQRL-style representation enhancement로 잡는 것이 더 현실적이다.
+
+## References
+
+[1] Albert T. Corbett and John R. Anderson. 1995. Knowledge tracing: Modeling the acquisition of procedural knowledge. *User Modeling and User-Adapted Interaction* 4, 4, 253-278. https://doi.org/10.1007/BF01099821
+
+[2] Frederic M. Lord. 1980. *Applications of Item Response Theory to Practical Testing Problems*. Lawrence Erlbaum Associates.
+
+[3] Philip I. Pavlik Jr., Hao Cen, and Kenneth R. Koedinger. 2009. Performance Factors Analysis: A New Alternative to Knowledge Tracing. In *Artificial Intelligence in Education*, 531-538. https://doi.org/10.3233/978-1-60750-028-5-531
+
+[4] Chris Piech, Jonathan Bassen, Jonathan Huang, Surya Ganguli, Mehran Sahami, Leonidas J. Guibas, and Jascha Sohl-Dickstein. 2015. Deep Knowledge Tracing. In *Advances in Neural Information Processing Systems 28*, 505-513. arXiv:1506.05908.
+
+[5] Jiani Zhang, Xingjian Shi, Irwin King, and Dit-Yan Yeung. 2017. Dynamic Key-Value Memory Networks for Knowledge Tracing. In *Proceedings of the 26th International Conference on World Wide Web*, 765-774. https://doi.org/10.1145/3038912.3052580
+
+[6] Shalini Pandey and George Karypis. 2019. A Self-Attentive Model for Knowledge Tracing. In *Proceedings of the 12th International Conference on Educational Data Mining*, 384-389. arXiv:1907.06837.
+
+[7] Aritra Ghosh, Neil Heffernan, and Andrew S. Lan. 2020. Context-Aware Attentive Knowledge Tracing. In *Proceedings of the 26th ACM SIGKDD International Conference on Knowledge Discovery & Data Mining*, 2330-2339. https://doi.org/10.1145/3394486.3403282
+
+[8] Chenyang Wang, Weizhi Ma, Min Zhang, Chuancheng Lv, Fengyuan Wan, Huijie Lin, Taoran Tang, Yiqun Liu, and Shaoping Ma. 2021. Temporal Cross-Effects in Knowledge Tracing. In *Proceedings of the 14th ACM International Conference on Web Search and Data Mining*, 517-525. https://doi.org/10.1145/3437963.3441802
+
+[9] Shuanghong Shen, Qi Liu, Enhong Chen, Zhenya Huang, Wei Huang, Yu Yin, Yu Su, and Shijin Wang. 2021. Learning Process-consistent Knowledge Tracing. In *Proceedings of the 27th ACM SIGKDD Conference on Knowledge Discovery & Data Mining*, 1452-1460. https://doi.org/10.1145/3447548.3467237
+
+[10] Jiahao Chen, Zitao Liu, Shuyan Huang, Qiongqiong Liu, and Weiqi Luo. 2023. Improving Interpretability of Deep Sequential Knowledge Tracing Models with Question-centric Cognitive Representations. In *Proceedings of the AAAI Conference on Artificial Intelligence* 37, 12, 14196-14204. https://doi.org/10.1609/aaai.v37i12.26661
+
+[11] Yu Yin, Le Dai, Zhenya Huang, Shuanghong Shen, Fei Wang, Qi Liu, Enhong Chen, and Xin Li. 2023. Tracing Knowledge Instead of Patterns: Stable Knowledge Tracing with Diagnostic Transformer. In *Proceedings of the ACM Web Conference 2023*, 855-864. https://doi.org/10.1145/3543507.3583255
+
+[12] Yoonjin Im, Eunseong Choi, Heejin Kook, and Jongwuk Lee. 2023. Forgetting-aware Linear Bias for Attentive Knowledge Tracing. In *Proceedings of the 32nd ACM International Conference on Information and Knowledge Management*, 3958-3962. https://doi.org/10.1145/3583780.3615191
+
+[13] Jianwen Sun, Fenghua Yu, Qian Wan, Qing Li, Sannyuya Liu, and Xiaoxuan Shen. 2024. Interpretable Knowledge Tracing with Multiscale State Representation. In *Proceedings of the ACM Web Conference 2024*, 3265-3276. https://doi.org/10.1145/3589334.3645373
+
+[14] Xiaoxuan Shen, Fenghua Yu, Yaqi Liu, Ruxia Liang, Qian Wan, Kai Yang, and Jianwen Sun. 2024. Revisiting Knowledge Tracing: A Simple and Powerful Model. In *Proceedings of the 32nd ACM International Conference on Multimedia*, 263-272. https://doi.org/10.1145/3664647.3681205
+
+[15] Shashank Sonkar, Andrew E. Waters, Andrew S. Lan, Phillip J. Grimaldi, and Richard G. Baraniuk. 2020. qDKT: Question-centric Deep Knowledge Tracing. In *Proceedings of the 13th International Conference on Educational Data Mining*, 677-681. arXiv:2005.12442.
+
+[16] Yilmazcan Ozyurt, Stefan Feuerriegel, and Mrinmaya Sachan. 2024. Automated Knowledge Concept Annotation and Question Representation Learning for Knowledge Tracing. arXiv:2410.01727.
+
+[17] Zitao Liu, Qiongqiong Liu, Jiahao Chen, Shuyan Huang, Jiliang Tang, and Weiqi Luo. 2022. pyKT: A Python Library to Benchmark Deep Learning based Knowledge Tracing Models. In *NeurIPS 2022 Datasets and Benchmarks Track*. arXiv:2206.11460.
+
+[18] Weihua Cheng, Hanwen Du, Chunxiao Li, Ersheng Ni, Liangdi Tan, Tianqi Xu, and Yongxin Ni. 2025. Uncertainty-aware Knowledge Tracing. arXiv:2501.05415.
+
+[19] Teng Guo, Yu Qin, Yubin Xia, Mingliang Hou, Zitao Liu, Feng Xia, and Weiqi Luo. 2025. Enhancing Knowledge Tracing through Decoupling Cognitive Pattern from Error-Prone Data. In *Proceedings of the ACM on Web Conference 2025*, 5108-5116. https://doi.org/10.1145/3696410.3714486
+
+[20] Ziwei Wang, Jie Zhou, Qin Chen, Min Zhang, Bo Jiang, Aimin Zhou, Qinchun Bai, and Liang He. 2025. LLM-KT: Aligning Large Language Models with Knowledge Tracing using a Plug-and-Play Instruction. arXiv:2502.02945.
+
+[21] Unggi Lee, Joo Young Kim, Ran Ju, Minyoung Jung, and Jeyeon Eo. 2026. A Training-Free Large Reasoning Model-based Knowledge Tracing Framework for Unified Prediction and Prescription. arXiv:2601.01708.
+
+[22] Eamon Worden, Cristina Heffernan, Neil Heffernan, and Shashank Sonkar. 2026. FoundationalASSIST: An Educational Dataset for Foundational Knowledge Tracing and Pedagogical Grounding of LLMs. arXiv:2602.00070.
+
+[23] Zhiyi Duan, Hongyu Yuan, and Rui Liu. 2026. RAG-KT: Cross-platform Explainable Knowledge Tracing with Multi-view Fusion Retrieval Generation. arXiv:2604.10960.
